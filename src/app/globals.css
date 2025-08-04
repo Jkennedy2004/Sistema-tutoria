@@ -1,26 +1,183 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@layer base {
+  html {
+    font-family: 'Inter', sans-serif;
+  }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+  /* Accessibility CSS Variables */
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --high-contrast: 0;
+    --monochrome: 0;
+    --font-size: 100%;
+    --line-spacing: 1.5;
+    --word-spacing: 0px;
+    --letter-spacing: 0px;
+    --dyslexic-font: 0;
+    --colorblind-typography: 0;
+    --page-zoom: 100%;
+    --focus-highlight: 0;
+    --skip-links: 0;
+    --pause-animations: 0;
+  }
+
+  /* High Contrast Mode */
+  html[style*="--high-contrast: 1"] {
+    filter: contrast(150%) brightness(120%);
+  }
+
+  /* Monochrome Mode */
+  html[style*="--monochrome: 1"] {
+    filter: grayscale(100%);
+  }
+
+  /* Font Size */
+  html[style*="--font-size"] {
+    font-size: var(--font-size);
+  }
+
+  /* Line Spacing */
+  html[style*="--line-spacing"] {
+    line-height: var(--line-spacing);
+  }
+
+  /* Word Spacing */
+  html[style*="--word-spacing"] {
+    word-spacing: var(--word-spacing);
+  }
+
+  /* Letter Spacing */
+  html[style*="--letter-spacing"] {
+    letter-spacing: var(--letter-spacing);
+  }
+
+  /* Dyslexic Font - Fixed */
+  html[style*="--dyslexic-font: 1"] * {
+    font-family: 'OpenDyslexic', 'Arial', sans-serif !important;
+  }
+
+  /* Colorblind Typography */
+  html[style*="--colorblind-typography: 1"] {
+    /* High contrast colors for colorblind users */
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --link-color: #0000EE;
+    --link-visited: #551A8B;
+    --background-primary: #FFFFFF;
+    --background-secondary: #F5F5F5;
+    --border-color: #000000;
+  }
+
+  html[style*="--colorblind-typography: 1"] * {
+    color: var(--text-primary) !important;
+  }
+
+  html[style*="--colorblind-typography: 1"] a {
+    color: var(--link-color) !important;
+    text-decoration: underline !important;
+  }
+
+  html[style*="--colorblind-typography: 1"] a:visited {
+    color: var(--link-visited) !important;
+  }
+
+  html[style*="--colorblind-typography: 1"] .bg-blue-600,
+  html[style*="--colorblind-typography: 1"] .bg-blue-500 {
+    background-color: #000000 !important;
+    color: #FFFFFF !important;
+  }
+
+  html[style*="--colorblind-typography: 1"] .text-blue-600,
+  html[style*="--colorblind-typography: 1"] .text-blue-500 {
+    color: #000000 !important;
+  }
+
+  /* Focus Highlight */
+  html[style*="--focus-highlight: 1"] *:focus {
+    outline: 3px solid #2196F3 !important;
+    outline-offset: 2px !important;
+  }
+
+  /* Skip Links */
+  html[style*="--skip-links: 1"] .skip-link {
+    position: absolute;
+    top: -40px;
+    left: 6px;
+    background: #2196F3;
+    color: white;
+    padding: 8px;
+    text-decoration: none;
+    border-radius: 4px;
+    z-index: 1000;
+  }
+
+  html[style*="--skip-links: 1"] .skip-link:focus {
+    top: 6px;
+  }
+
+  /* Pause Animations */
+  html[style*="--pause-animations: 1"] * {
+    animation-play-state: paused !important;
+    transition: none !important;
+  }
+
+  /* Visual Alerts */
+  html[style*="--visual-alerts: 1"] .alert-sound {
+    animation: flash 1s infinite;
+  }
+
+  @keyframes flash {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .btn-primary {
+    @apply bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-lg transition-colors duration-200;
+  }
+
+  .btn-secondary {
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 px-6 rounded-lg border border-gray-300 transition-colors duration-200;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300;
+  }
+
+  .gradient-bg {
+    background: linear-gradient(135deg, #E3F2FD 0%, #FFFFFF 100%);
+  }
+
+  .text-responsive {
+    @apply text-2xl md:text-3xl lg:text-4xl xl:text-5xl;
+  }
+
+  /* Accessibility Button */
+  .accessibility-btn {
+    @apply fixed top-4 right-4 z-40 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors duration-200;
+  }
+}
+
+@layer utilities {
+  .fade-in {
+    animation: fadeIn 0.6s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
