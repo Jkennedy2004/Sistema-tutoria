@@ -119,7 +119,7 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
         const parent = element.parentElement
         if (parent) {
           const parentText = parent.textContent?.trim()
-          if (cleanText(parentText) === cleanText(textContent)) {
+          if (parentText && cleanText(parentText) === cleanText(textContent)) {
             return '' // Don't read if parent has same text
           }
         }

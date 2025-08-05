@@ -3,6 +3,7 @@ export interface User {
   email: string
   name?: string
   avatar_url?: string
+  userType?: 'student' | 'tutor'
   created_at: string
   updated_at: string
 }
@@ -22,6 +23,13 @@ export interface RegisterCredentials {
   email: string
   password: string
   name: string
+  userType: 'student' | 'tutor'
+}
+
+export interface RegisterResult {
+  success: boolean
+  email?: string
+  error?: string
 }
 
 export interface AuthContextType {
@@ -29,7 +37,7 @@ export interface AuthContextType {
   loading: boolean
   error: string | null
   login: (credentials: LoginCredentials) => Promise<void>
-  register: (credentials: RegisterCredentials) => Promise<void>
+  register: (credentials: RegisterCredentials) => Promise<RegisterResult>
   logout: () => Promise<void>
   clearError: () => void
 } 
