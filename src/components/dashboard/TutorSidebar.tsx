@@ -114,12 +114,6 @@ export function TutorSidebar({ isOpen, onClose, isDesktopSidebarOpen = true, onT
       href: '/dashboard/tutor/messages',
       icon: MessageSquare,
       current: pathname === '/dashboard/tutor/messages'
-    },
-    {
-      name: currentContent.navigation.settings,
-      href: '/dashboard/tutor/settings',
-      icon: Settings,
-      current: pathname === '/dashboard/tutor/settings'
     }
   ]
 

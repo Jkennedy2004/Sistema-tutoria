@@ -4,25 +4,59 @@ import { useAuth } from '../../../../lib/auth/AuthContext'
 import { ProtectedRoute } from '../../../../components/auth/ProtectedRoute'
 import { StudentSidebar } from '../../../../components/dashboard/StudentSidebar'
 import { AccessibilityPanel } from '../../../../components/accessibility/AccessibilityPanel'
-import { useState, useEffect } from 'react'
-import { Menu, MessageSquare, Send, User, Clock, Search, Filter, Accessibility, Globe, Plus } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { 
+  Menu, 
+  MessageSquare, 
+  Send, 
+  User, 
+  Clock, 
+  Search, 
+  Filter, 
+  Accessibility, 
+  Globe, 
+  Plus,
+  RefreshCw,
+  Edit3,
+  Trash2,
+  Check,
+  CheckCheck,
+  MoreVertical,
+  X,
+  AlertCircle,
+  Smile,
+  GraduationCap
+} from 'lucide-react'
 import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
 
 interface Message {
   id: string
   content: string
+  sender_id: string
+  receiver_id: string
   sender_name: string
   receiver_name: string
   created_at: string
+  updated_at: string
   is_read: boolean
   session_title?: string
+  is_edited?: boolean
 }
 
 interface Tutor {
   id: string
   name: string
   email: string
+}
+
+interface Conversation {
+  tutorId: string
+  tutorName: string
+  lastMessage: string
+  lastMessageTime: string
+  unreadCount: number
+  messages: Message[]
 }
 
 export default function StudentMessagesPage() {
@@ -33,12 +67,19 @@ export default function StudentMessagesPage() {
   const { language } = useAccessibilityContext()
   const [messages, setMessages] = useState<Message[]>([])
   const [tutors, setTutors] = useState<Tutor[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState('all')
   const [selectedTutor, setSelectedTutor] = useState<string>('')
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [selectedConversation, setSelectedConversation] = useState<string>('')
+  const [editingMessage, setEditingMessage] = useState<string>('')
+  const [editContent, setEditContent] = useState('')
+  const [showNewMessageModal, setShowNewMessageModal] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const handleLogout = async () => {
     await logout()
@@ -49,9 +90,40 @@ export default function StudentMessagesPage() {
     loadTutors()
   }, [])
 
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  // Mark messages as read when conversation is selected
+  useEffect(() => {
+    const markMessagesAsRead = async () => {
+      if (selectedConversation && user?.id) {
+        const unreadMessages = messages.filter(msg => 
+          msg.sender_id !== user.id && 
+          msg.receiver_id === user.id && 
+          !msg.is_read &&
+          (msg.sender_id === selectedConversation || msg.receiver_id === selectedConversation)
+        )
+        
+        // Mark all unread messages in this conversation as read
+        for (const message of unreadMessages) {
+          await markAsRead(message.id)
+        }
+      }
+    }
+    
+    markMessagesAsRead()
+  }, [selectedConversation, messages, user?.id])
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
   const loadMessages = async () => {
     try {
       if (!user?.id) return
+
+      setRefreshing(true)
 
       // Get messages where student is sender or receiver
       const { data, error } = await supabase
@@ -59,17 +131,17 @@ export default function StudentMessagesPage() {
         .select(`
           id,
           content,
-          created_at,
-          is_read,
           sender_id,
           receiver_id,
+          created_at,
+          is_read,
           session_id,
           sender:sender_id(name),
           receiver:receiver_id(name),
           sessions(title)
         `)
         .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: true })
 
       if (error) {
         console.error('Error loading messages:', error)
@@ -79,19 +151,62 @@ export default function StudentMessagesPage() {
       const transformedMessages = data?.map(msg => ({
         id: msg.id,
         content: msg.content,
+        sender_id: msg.sender_id,
+        receiver_id: msg.receiver_id,
         sender_name: (msg.sender as any)?.name || 'Usuario',
         receiver_name: (msg.receiver as any)?.name || 'Usuario',
         created_at: msg.created_at,
+        updated_at: msg.created_at, // Use created_at as fallback
         is_read: msg.is_read,
-        session_title: (msg.sessions as any)?.title
+        session_title: (msg.sessions as any)?.title,
+        is_edited: false // Default to false since we don't have the column yet
       })) || []
 
       setMessages(transformedMessages)
+      organizeConversations(transformedMessages)
     } catch (error) {
       console.error('Error loading messages:', error)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
+  }
+
+  const organizeConversations = (allMessages: Message[]) => {
+    const conversationMap = new Map<string, Conversation>()
+
+    allMessages.forEach(message => {
+      const otherUserId = message.sender_id === user?.id ? message.receiver_id : message.sender_id
+      const otherUserName = message.sender_id === user?.id ? message.receiver_name : message.sender_name
+
+      if (!conversationMap.has(otherUserId)) {
+        conversationMap.set(otherUserId, {
+          tutorId: otherUserId,
+          tutorName: otherUserName,
+          lastMessage: message.content,
+          lastMessageTime: message.created_at,
+          unreadCount: 0,
+          messages: []
+        })
+      }
+
+      const conversation = conversationMap.get(otherUserId)!
+      conversation.messages.push(message)
+      
+      if (message.created_at > conversation.lastMessageTime) {
+        conversation.lastMessage = message.content
+        conversation.lastMessageTime = message.created_at
+      }
+
+      if (!message.is_read && message.sender_id !== user?.id) {
+        conversation.unreadCount++
+      }
+    })
+
+    const sortedConversations = Array.from(conversationMap.values())
+      .sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime())
+
+    setConversations(sortedConversations)
   }
 
   const loadTutors = async () => {
@@ -135,12 +250,109 @@ export default function StudentMessagesPage() {
 
       setNewMessage('')
       setSelectedTutor('')
+      setShowNewMessageModal(false)
       await loadMessages()
     } catch (error) {
       console.error('Error sending message:', error)
     } finally {
       setSending(false)
     }
+  }
+
+  const handleReplyMessage = async (tutorId: string, content: string) => {
+    try {
+      if (!user?.id || !content.trim()) return
+
+      setSending(true)
+
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          sender_id: user.id,
+          receiver_id: tutorId,
+          content: content.trim(),
+          is_read: false
+        })
+
+      if (error) {
+        console.error('Error sending message:', error)
+        return
+      }
+
+      await loadMessages()
+    } catch (error) {
+      console.error('Error sending message:', error)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleEditMessage = async (messageId: string, newContent: string) => {
+    try {
+      if (!newContent.trim()) return
+
+      const { error } = await supabase
+        .from('messages')
+        .update({
+          content: newContent.trim()
+          // updated_at will be handled by trigger when column exists
+        })
+        .eq('id', messageId)
+
+      if (error) {
+        console.error('Error editing message:', error)
+        return
+      }
+
+      setEditingMessage('')
+      setEditContent('')
+      await loadMessages()
+    } catch (error) {
+      console.error('Error editing message:', error)
+    }
+  }
+
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId)
+
+      if (error) {
+        console.error('Error deleting message:', error)
+        return
+      }
+
+      await loadMessages()
+    } catch (error) {
+      console.error('Error deleting message:', error)
+    }
+  }
+
+  const markAsRead = async (messageId: string) => {
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ is_read: true })
+        .eq('id', messageId)
+
+      if (error) {
+        console.error('Error marking message as read:', error)
+        return
+      }
+
+      await loadMessages()
+    } catch (error) {
+      console.error('Error marking message as read:', error)
+    }
+  }
+
+  const getConversationMessages = (tutorId: string) => {
+    return messages.filter(msg => 
+      (msg.sender_id === user?.id && msg.receiver_id === tutorId) ||
+      (msg.sender_id === tutorId && msg.receiver_id === user?.id)
+    )
   }
 
   // Contenido basado en idioma
@@ -150,8 +362,10 @@ export default function StudentMessagesPage() {
       welcomeUser: 'Bienvenido,',
       logout: 'Cerrar Sesión',
       loading: 'Cargando...',
+      refreshing: 'Actualizando...',
       sending: 'Enviando...',
       noMessages: 'No hay mensajes',
+      noConversations: 'No hay conversaciones',
       searchPlaceholder: 'Buscar mensajes...',
       filterAll: 'Todos',
       filterUnread: 'No leídos',
@@ -159,24 +373,43 @@ export default function StudentMessagesPage() {
       filterReceived: 'Recibidos',
       actions: {
         send: 'Enviar',
+        reply: 'Responder',
+        edit: 'Editar',
+        delete: 'Eliminar',
+        cancel: 'Cancelar',
+        save: 'Guardar',
         newMessage: 'Nuevo Mensaje',
-        selectTutor: 'Seleccionar tutor'
+        selectTutor: 'Seleccionar tutor',
+        refresh: 'Actualizar'
       },
       stats: {
         total: 'Total de Mensajes',
         unread: 'No Leídos',
-        sent: 'Enviados'
+        sent: 'Enviados',
+        conversations: 'Conversaciones'
       },
       messagePlaceholder: 'Escribe tu mensaje...',
-      noTutors: 'No hay tutores disponibles'
+      replyPlaceholder: 'Escribe tu respuesta...',
+      editPlaceholder: 'Edita tu mensaje...',
+      noTutors: 'No hay tutores disponibles',
+      messageStatus: {
+        sent: 'Enviado',
+        delivered: 'Entregado',
+        read: 'Leído',
+        edited: 'Editado'
+      },
+      confirmDelete: '¿Estás seguro de que quieres eliminar este mensaje?',
+      noReply: 'No se puede responder a este mensaje'
     },
     en: {
       title: 'Messages',
       welcomeUser: 'Welcome,',
       logout: 'Logout',
       loading: 'Loading...',
+      refreshing: 'Refreshing...',
       sending: 'Sending...',
       noMessages: 'No messages',
+      noConversations: 'No conversations',
       searchPlaceholder: 'Search messages...',
       filterAll: 'All',
       filterUnread: 'Unread',
@@ -184,16 +417,33 @@ export default function StudentMessagesPage() {
       filterReceived: 'Received',
       actions: {
         send: 'Send',
+        reply: 'Reply',
+        edit: 'Edit',
+        delete: 'Delete',
+        cancel: 'Cancel',
+        save: 'Save',
         newMessage: 'New Message',
-        selectTutor: 'Select tutor'
+        selectTutor: 'Select tutor',
+        refresh: 'Refresh'
       },
       stats: {
         total: 'Total Messages',
         unread: 'Unread',
-        sent: 'Sent'
+        sent: 'Sent',
+        conversations: 'Conversations'
       },
       messagePlaceholder: 'Write your message...',
-      noTutors: 'No tutors available'
+      replyPlaceholder: 'Write your reply...',
+      editPlaceholder: 'Edit your message...',
+      noTutors: 'No tutors available',
+      messageStatus: {
+        sent: 'Sent',
+        delivered: 'Delivered',
+        read: 'Read',
+        edited: 'Edited'
+      },
+      confirmDelete: 'Are you sure you want to delete this message?',
+      noReply: 'Cannot reply to this message'
     }
   }
 
@@ -201,31 +451,42 @@ export default function StudentMessagesPage() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
-    return date.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    const now = new Date()
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+
+    if (diffInHours < 24) {
+      return date.toLocaleTimeString(language === 'es' ? 'es-ES' : 'en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } else if (diffInHours < 168) { // 7 days
+      return date.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } else {
+      return date.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      })
+    }
   }
 
-  const filteredMessages = messages.filter(message => {
-    const matchesSearch = message.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         message.sender_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         message.receiver_name.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredConversations = conversations.filter(conversation => {
+    const matchesSearch = conversation.tutorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         conversation.lastMessage.toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesFilter = filter === 'all' || 
-                         (filter === 'unread' && !message.is_read) ||
-                         (filter === 'sent' && message.sender_name === user?.name) ||
-                         (filter === 'received' && message.receiver_name === user?.name)
+                         (filter === 'unread' && conversation.unreadCount > 0)
     
     return matchesSearch && matchesFilter
   })
 
   const totalMessages = messages.length
-  const unreadMessages = messages.filter(m => !m.is_read).length
-  const sentMessages = messages.filter(m => m.sender_name === user?.name).length
+  const unreadMessages = messages.filter(m => !m.is_read && m.sender_id !== user?.id).length
+  const sentMessages = messages.filter(m => m.sender_id === user?.id).length
 
   return (
     <ProtectedRoute>
@@ -287,10 +548,21 @@ export default function StudentMessagesPage() {
               </div>
               
               <div className="flex items-center space-x-4">
-                <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-700">
-                  <span>{currentContent.welcomeUser}</span>
-                  <span className="font-medium">{user?.name}</span>
-                </div>
+                <button
+                  onClick={loadMessages}
+                  disabled={refreshing}
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label={currentContent.actions.refresh}
+                >
+                  <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+                </button>
+                <button
+                  onClick={() => setShowNewMessageModal(true)}
+                  className="btn-primary flex items-center space-x-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{currentContent.actions.newMessage}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -298,7 +570,7 @@ export default function StudentMessagesPage() {
           {/* Main content area */}
           <main className="p-4 sm:p-6 lg:p-8">
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="flex items-center">
                   <div className="p-3 bg-blue-100 rounded-lg">
@@ -334,44 +606,16 @@ export default function StudentMessagesPage() {
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* New Message Section */}
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">{currentContent.actions.newMessage}</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {currentContent.actions.selectTutor}
-                  </label>
-                  <select
-                    value={selectedTutor}
-                    onChange={(e) => setSelectedTutor(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">{currentContent.actions.selectTutor}</option>
-                    {tutors.map((tutor) => (
-                      <option key={tutor.id} value={tutor.id}>{tutor.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex space-x-3">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder={currentContent.messagePlaceholder}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={!selectedTutor || !newMessage.trim() || sending}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center space-x-1"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>{sending ? currentContent.sending : currentContent.actions.send}</span>
-                  </button>
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-3 bg-purple-100 rounded-lg">
+                    <User className="w-6 h-6 text-purple-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-500">{currentContent.stats.conversations}</p>
+                    <p className="text-2xl font-semibold text-gray-900">{conversations.length}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -399,69 +643,287 @@ export default function StudentMessagesPage() {
                 >
                   <option value="all">{currentContent.filterAll}</option>
                   <option value="unread">{currentContent.filterUnread}</option>
-                  <option value="sent">{currentContent.filterSent}</option>
-                  <option value="received">{currentContent.filterReceived}</option>
                 </select>
               </div>
             </div>
 
             {loading ? (
               <div className="flex items-center justify-center h-64">
-                <div className="text-lg text-gray-600">{currentContent.loading}</div>
-              </div>
-            ) : filteredMessages.length === 0 ? (
-              <div className="text-center py-12">
-                <MessageSquare className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">{currentContent.noMessages}</h3>
-                <p className="text-gray-500">Comienza una conversación con un tutor</p>
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-lg text-gray-600">{currentContent.loading}</p>
+                </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                {filteredMessages.map((message) => (
-                  <div key={message.id} className={`bg-white rounded-lg shadow p-6 ${!message.is_read ? 'border-l-4 border-blue-500' : ''}`}>
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {message.sender_name === user?.name ? 'Tú' : message.sender_name}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {message.sender_name === user?.name ? `Para: ${message.receiver_name}` : `De: ${message.sender_name}`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm text-gray-500">
-                        <Clock className="w-4 h-4" />
-                        <span>{formatDate(message.created_at)}</span>
-                      </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Conversations List */}
+                <div className="lg:col-span-1">
+                  <div className="bg-white rounded-lg shadow">
+                    <div className="px-6 py-4 border-b border-gray-200">
+                      <h3 className="text-lg font-medium text-gray-900">Conversaciones</h3>
                     </div>
-                    
-                    <div className="mb-3">
-                      <p className="text-gray-700">{message.content}</p>
+                    <div className="max-h-96 overflow-y-auto">
+                      {filteredConversations.length === 0 ? (
+                        <div className="p-6 text-center">
+                          <Smile className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-500">{currentContent.noConversations}</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-200">
+                          {filteredConversations.map((conversation) => (
+                            <div
+                              key={conversation.tutorId}
+                              onClick={() => setSelectedConversation(conversation.tutorId)}
+                              className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
+                                selectedConversation === conversation.tutorId ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center space-x-2">
+                                  <GraduationCap className="w-4 h-4 text-blue-500" />
+                                  <h4 className="font-medium text-gray-900">{conversation.tutorName}</h4>
+                                </div>
+                                {conversation.unreadCount > 0 && (
+                                  <span className="bg-red-500 text-white text-xs rounded-full px-2 py-1">
+                                    {conversation.unreadCount}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 truncate mb-1">
+                                {conversation.lastMessage}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {formatDate(conversation.lastMessageTime)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
+                  </div>
+                </div>
 
-                    {message.session_title && (
-                      <div className="text-sm text-gray-500">
-                        Sesión: {message.session_title}
-                      </div>
-                    )}
-
-                    {!message.is_read && message.sender_name !== user?.name && (
-                      <div className="mt-2">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          No leído
-                        </span>
+                {/* Messages View */}
+                <div className="lg:col-span-2">
+                  <div className="bg-white rounded-lg shadow">
+                    {selectedConversation ? (
+                      <>
+                        <div className="px-6 py-4 border-b border-gray-200">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <GraduationCap className="w-5 h-5 text-blue-500" />
+                              <h3 className="text-lg font-medium text-gray-900">
+                                {conversations.find(c => c.tutorId === selectedConversation)?.tutorName}
+                              </h3>
+                            </div>
+                            <button
+                              onClick={() => setSelectedConversation('')}
+                              className="lg:hidden p-2 text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="h-96 flex flex-col">
+                          {/* Messages */}
+                          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {getConversationMessages(selectedConversation).map((message) => (
+                              <div
+                                key={message.id}
+                                className={`flex ${message.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
+                              >
+                                <div className={`max-w-xs lg:max-w-md ${message.sender_id === user?.id ? 'order-2' : 'order-1'}`}>
+                                  <div className={`rounded-lg px-4 py-2 ${
+                                    message.sender_id === user?.id 
+                                      ? 'bg-blue-500 text-white' 
+                                      : 'bg-gray-100 text-gray-900'
+                                  }`}>
+                                    {editingMessage === message.id ? (
+                                      <div className="space-y-2">
+                                        <textarea
+                                          value={editContent}
+                                          onChange={(e) => setEditContent(e.target.value)}
+                                          className="w-full p-2 text-sm border rounded resize-none focus:ring-2 focus:ring-blue-500"
+                                          rows={2}
+                                        />
+                                        <div className="flex space-x-2">
+                                          <button
+                                            onClick={() => handleEditMessage(message.id, editContent)}
+                                            className="text-xs bg-green-500 text-white px-2 py-1 rounded"
+                                          >
+                                            {currentContent.actions.save}
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              setEditingMessage('')
+                                              setEditContent('')
+                                            }}
+                                            className="text-xs bg-gray-500 text-white px-2 py-1 rounded"
+                                          >
+                                            {currentContent.actions.cancel}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <p className="text-sm">{message.content}</p>
+                                        {message.is_edited && (
+                                          <p className="text-xs opacity-70 mt-1">
+                                            {currentContent.messageStatus.edited}
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className={`flex items-center justify-between mt-1 text-xs text-gray-500 ${
+                                    message.sender_id === user?.id ? 'justify-end' : 'justify-start'
+                                  }`}>
+                                    <span>{formatDate(message.created_at)}</span>
+                                    {message.sender_id === user?.id && (
+                                      <div className="flex items-center space-x-1">
+                                        {message.is_read ? (
+                                          <CheckCheck className="w-3 h-3 text-blue-500" />
+                                        ) : (
+                                          <Check className="w-3 h-3" />
+                                        )}
+                                        <div className="flex space-x-1">
+                                          <button
+                                            onClick={() => {
+                                              setEditingMessage(message.id)
+                                              setEditContent(message.content)
+                                            }}
+                                            className="hover:text-blue-600"
+                                          >
+                                            <Edit3 className="w-3 h-3" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteMessage(message.id)}
+                                            className="hover:text-red-600"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            <div ref={messagesEndRef} />
+                          </div>
+                          
+                          {/* Reply Input */}
+                          <div className="border-t border-gray-200 p-4">
+                            <div className="flex space-x-2">
+                              <input
+                                type="text"
+                                placeholder={currentContent.replyPlaceholder}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                    handleReplyMessage(selectedConversation, e.currentTarget.value)
+                                    e.currentTarget.value = ''
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={() => {
+                                  const input = document.querySelector('input[placeholder*="reply"]') as HTMLInputElement
+                                  if (input?.value.trim()) {
+                                    handleReplyMessage(selectedConversation, input.value)
+                                    input.value = ''
+                                  }
+                                }}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                              >
+                                <Send className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="h-96 flex items-center justify-center">
+                        <div className="text-center">
+                          <MessageSquare className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-medium text-gray-900 mb-2">
+                            {currentContent.noMessages}
+                          </h3>
+                          <p className="text-gray-500">
+                            Selecciona una conversación para comenzar
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
-                ))}
+                </div>
               </div>
             )}
           </main>
         </div>
+
+        {/* New Message Modal */}
+        {showNewMessageModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  {currentContent.actions.newMessage}
+                </h3>
+                <button
+                  onClick={() => setShowNewMessageModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {currentContent.actions.selectTutor}
+                  </label>
+                  <select
+                    value={selectedTutor}
+                    onChange={(e) => setSelectedTutor(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">{currentContent.actions.selectTutor}</option>
+                    {tutors.map((tutor) => (
+                      <option key={tutor.id} value={tutor.id}>{tutor.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mensaje
+                  </label>
+                  <textarea
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder={currentContent.messagePlaceholder}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowNewMessageModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                  >
+                    {currentContent.actions.cancel}
+                  </button>
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={!selectedTutor || !newMessage.trim() || sending}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {sending ? currentContent.sending : currentContent.actions.send}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ProtectedRoute>
   )

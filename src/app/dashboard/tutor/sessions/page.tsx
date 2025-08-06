@@ -5,36 +5,62 @@ import { ProtectedRoute } from '../../../../components/auth/ProtectedRoute'
 import { TutorSidebar } from '../../../../components/dashboard/TutorSidebar'
 import { AccessibilityPanel } from '../../../../components/accessibility/AccessibilityPanel'
 import { useState, useEffect } from 'react'
-import { Menu, Calendar, Clock, User, MapPin, Plus, Filter, Search, Star, Edit, Trash2, Video, Building, Home, BookOpen, FileText, LogOut, Accessibility, Globe } from 'lucide-react'
+import { Menu, Calendar, Clock, User, MapPin, Plus, Filter, Search, Star, Edit, Trash2, Video, Building, Home, BookOpen, FileText, LogOut, Accessibility, Globe, Users, Mail, Phone, Check, X } from 'lucide-react'
 import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
 import Link from 'next/link'
 
 interface Session {
   id: string
-  student_name: string | null
-  subject_name: string
-  subject_id: string
   title: string
   description: string
   start_time: string
   end_time: string
   duration_minutes: number
   status: string
-  meeting_url: string
-  meeting_location: string
-  session_type: 'presencial' | 'virtual'
-  faculty: string
-  classroom: string
-  notes: string
-  student_rating: number
-  student_review: string
+  session_type: string
+  meeting_url?: string
+  meeting_location?: string
+  faculty?: string
+  classroom?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+  // Subject information
+  subject_id: string
+  subject_name: string
+  subject_description?: string
+  // Participant count
+  participant_count: number
 }
 
 interface TutorSubject {
   id: string
   subject_id: string
   subject_name: string
+}
+
+interface SessionParticipant {
+  id: string
+  session_id: string
+  student_id: string
+  joined_at: string
+  status: string
+  created_at: string
+  updated_at: string
+  // Session information
+  session_title: string
+  start_time: string
+  end_time: string
+  session_type: string
+  // Student information
+  student_name: string
+  student_email: string
+  student_phone?: string
+  student_avatar_url?: string
+  // Tutor information
+  tutor_id: string
+  tutor_name: string
 }
 
 export default function TutorSessionsPage() {
@@ -45,9 +71,11 @@ export default function TutorSessionsPage() {
   const { language } = useAccessibilityContext()
   const [sessions, setSessions] = useState<Session[]>([])
   const [tutorSubjects, setTutorSubjects] = useState<TutorSubject[]>([])
+  const [participants, setParticipants] = useState<SessionParticipant[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedSession, setSelectedSession] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingSession, setEditingSession] = useState<Session | null>(null)
@@ -68,128 +96,6 @@ export default function TutorSessionsPage() {
   // Virtual fields
   const [meetingUrl, setMeetingUrl] = useState<string>('')
 
-  // Contenido basado en idioma
-  const content = {
-    es: {
-      title: 'Mis Sesiones',
-      welcomeUser: 'Bienvenido,',
-      logout: 'Cerrar Sesión',
-      addSession: 'Agregar Sesión',
-      editSession: 'Editar Sesión',
-      stats: {
-        total: 'Total Sesiones',
-        completed: 'Completadas',
-        scheduled: 'Programadas',
-        cancelled: 'Canceladas'
-      },
-      sessions: 'Sesiones de Tutoría',
-      noSessions: 'No hay sesiones disponibles',
-      loading: 'Cargando...',
-      filters: {
-        all: 'Todas',
-        scheduled: 'Programadas',
-        inProgress: 'En Progreso',
-        completed: 'Completadas',
-        cancelled: 'Canceladas'
-      },
-      search: 'Buscar sesiones...',
-      actions: {
-        join: 'Unirse',
-        start: 'Iniciar',
-        cancel: 'Cancelar',
-        complete: 'Completar',
-        viewDetails: 'Ver Detalles',
-        addNotes: 'Agregar Notas',
-        edit: 'Editar',
-        delete: 'Eliminar',
-        save: 'Guardar'
-      },
-      form: {
-        selectSubject: 'Seleccionar materia',
-        title: 'Título de la sesión',
-        description: 'Descripción',
-        sessionType: 'Tipo de sesión',
-        presencial: 'Presencial',
-        virtual: 'Virtual',
-        date: 'Fecha',
-        time: 'Hora',
-        duration: 'Duración (minutos)',
-        faculty: 'Facultad',
-        classroom: 'Aula',
-        meetingUrl: 'URL de la reunión',
-        save: 'Guardar',
-        cancel: 'Cancelar'
-      },
-      messages: {
-        sessionCreated: 'Sesión creada correctamente',
-        sessionUpdated: 'Sesión actualizada correctamente',
-        errorCreating: 'Error al crear la sesión',
-        errorUpdating: 'Error al actualizar la sesión',
-        confirmDelete: '¿Estás seguro de que quieres eliminar esta sesión?'
-      }
-    },
-    en: {
-      title: 'My Sessions',
-      welcomeUser: 'Welcome,',
-      logout: 'Logout',
-      addSession: 'Add Session',
-      editSession: 'Edit Session',
-      stats: {
-        total: 'Total Sessions',
-        completed: 'Completed',
-        scheduled: 'Scheduled',
-        cancelled: 'Cancelled'
-      },
-      sessions: 'Tutoring Sessions',
-      noSessions: 'No sessions available',
-      loading: 'Loading...',
-      filters: {
-        all: 'All',
-        scheduled: 'Scheduled',
-        inProgress: 'In Progress',
-        completed: 'Completed',
-        cancelled: 'Cancelled'
-      },
-      search: 'Search sessions...',
-      actions: {
-        join: 'Join',
-        start: 'Start',
-        cancel: 'Cancel',
-        complete: 'Complete',
-        viewDetails: 'View Details',
-        addNotes: 'Add Notes',
-        edit: 'Edit',
-        delete: 'Delete',
-        save: 'Save'
-      },
-      form: {
-        selectSubject: 'Select subject',
-        title: 'Session title',
-        description: 'Description',
-        sessionType: 'Session type',
-        presencial: 'In-person',
-        virtual: 'Virtual',
-        date: 'Date',
-        time: 'Time',
-        duration: 'Duration (minutes)',
-        faculty: 'Faculty',
-        classroom: 'Classroom',
-        meetingUrl: 'Meeting URL',
-        save: 'Save',
-        cancel: 'Cancel'
-      },
-      messages: {
-        sessionCreated: 'Session created successfully',
-        sessionUpdated: 'Session updated successfully',
-        errorCreating: 'Error creating session',
-        errorUpdating: 'Error updating session',
-        confirmDelete: 'Are you sure you want to delete this session?'
-      }
-    }
-  }
-
-  const currentContent = content[language]
-
   const handleLogout = async () => {
     await logout()
   }
@@ -202,8 +108,15 @@ export default function TutorSessionsPage() {
       setLoading(true)
 
       let query = supabase
-        .from('session_details')
-        .select('*')
+        .from('sessions')
+        .select(`
+          *,
+          subjects (
+            id,
+            name,
+            description
+          )
+        `)
         .eq('tutor_id', user.id)
         .order('start_time', { ascending: false })
 
@@ -216,13 +129,30 @@ export default function TutorSessionsPage() {
 
       if (error) throw error
 
+      // Get participant count for each session
+      const sessionsWithParticipants = await Promise.all(
+        data?.map(async (session) => {
+          const { count } = await supabase
+            .from('session_participants')
+            .select('*', { count: 'exact', head: true })
+            .eq('session_id', session.id)
+            .eq('status', 'joined')
+
+          return {
+            ...session,
+            subject_name: (session.subjects as any)?.name || '',
+            subject_description: (session.subjects as any)?.description || '',
+            participant_count: count || 0
+          }
+        }) || []
+      )
+
       // Filtrar por término de búsqueda
-      let filteredData = data || []
+      let filteredData = sessionsWithParticipants
       if (searchTerm) {
         filteredData = filteredData.filter(session =>
-          session.student_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          session.subject_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          session.title?.toLowerCase().includes(searchTerm.toLowerCase())
+          session.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          session.subject_name?.toLowerCase().includes(searchTerm.toLowerCase())
         )
       }
 
@@ -272,13 +202,40 @@ export default function TutorSessionsPage() {
     loadTutorSubjects()
   }, [user?.id, filter, searchTerm])
 
+  useEffect(() => {
+    if (selectedSession) {
+      loadSessionParticipants(selectedSession)
+    }
+  }, [selectedSession])
+
+  const loadSessionParticipants = async (sessionId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('session_participants_details')
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('tutor_id', user?.id)
+        .eq('status', 'joined')
+        .order('joined_at', { ascending: true })
+
+      if (error) {
+        console.error('Error loading session participants:', error)
+        return
+      }
+
+      setParticipants(data || [])
+    } catch (error) {
+      console.error('Error loading session participants:', error)
+    }
+  }
+
   // Función para abrir modal de edición
   const handleEditSession = (session: Session) => {
     setEditingSession(session)
     setSelectedSubject(session.subject_id)
     setTitle(session.title)
     setDescription(session.description || '')
-    setSessionType(session.session_type || 'presencial')
+    setSessionType(session.session_type as 'presencial' | 'virtual')
     
     // Parsear fecha y hora
     const sessionDate = new Date(session.start_time)
@@ -504,6 +461,216 @@ export default function TutorSessionsPage() {
     }
   }
 
+  // Contenido basado en idioma
+  const content = {
+    es: {
+      title: 'Mis Sesiones',
+      welcomeUser: 'Bienvenido,',
+      logout: 'Cerrar Sesión',
+      addSession: 'Agregar Sesión',
+      editSession: 'Editar Sesión',
+      stats: {
+        total: 'Total Sesiones',
+        completed: 'Completadas',
+        scheduled: 'Programadas',
+        cancelled: 'Canceladas'
+      },
+      sessions: 'Sesiones de Tutoría',
+      noSessions: 'No hay sesiones disponibles',
+      loading: 'Cargando...',
+      filters: {
+        all: 'Todas',
+        scheduled: 'Programadas',
+        inProgress: 'En Progreso',
+        completed: 'Completadas',
+        cancelled: 'Canceladas'
+      },
+      search: 'Buscar sesiones...',
+      searchPlaceholder: 'Buscar sesiones...',
+      filterAll: 'Todas',
+      filterVirtual: 'Virtual',
+      filterPresencial: 'Presencial',
+      actions: {
+        join: 'Unirse',
+        start: 'Iniciar',
+        cancel: 'Cancelar',
+        complete: 'Completar',
+        viewDetails: 'Ver Detalles',
+        addNotes: 'Agregar Notas',
+        edit: 'Editar',
+        delete: 'Eliminar',
+        save: 'Guardar',
+        viewParticipants: 'Ver Participantes'
+      },
+      form: {
+        selectSubject: 'Seleccionar materia',
+        title: 'Título de la sesión',
+        description: 'Descripción',
+        sessionType: 'Tipo de sesión',
+        presencial: 'Presencial',
+        virtual: 'Virtual',
+        date: 'Fecha',
+        time: 'Hora',
+        duration: 'Duración (minutos)',
+        faculty: 'Facultad',
+        classroom: 'Aula',
+        meetingUrl: 'URL de la reunión',
+        save: 'Guardar',
+        cancel: 'Cancelar'
+      },
+      messages: {
+        sessionCreated: 'Sesión creada correctamente',
+        sessionUpdated: 'Sesión actualizada correctamente',
+        errorCreating: 'Error al crear la sesión',
+        errorUpdating: 'Error al actualizar la sesión',
+        confirmDelete: '¿Estás seguro de que quieres eliminar esta sesión?'
+      },
+      status: {
+        scheduled: 'Programada',
+        in_progress: 'En Progreso',
+        completed: 'Completada',
+        cancelled: 'Cancelada'
+      },
+      sessionType: {
+        presencial: 'Presencial',
+        virtual: 'Virtual'
+      },
+      sessionInfo: {
+        status: 'Estado',
+        type: 'Tipo',
+        duration: 'Duración',
+        location: 'Ubicación',
+        subject: 'Materia',
+        participants: 'Participantes',
+        startTime: 'Hora de inicio',
+        endTime: 'Hora de fin',
+        noParticipants: 'No hay participantes aún'
+      },
+      studentInfo: {
+        name: 'Nombre',
+        email: 'Email',
+        phone: 'Teléfono',
+        joinedAt: 'Se unió el'
+      },
+      location: 'Ubicación',
+      meeting: 'Reunión',
+      subject: 'Materia',
+      duration: 'Duración',
+      noParticipants: 'No hay participantes aún',
+      viewParticipants: 'Ver Participantes'
+    },
+    en: {
+      title: 'My Sessions',
+      welcomeUser: 'Welcome,',
+      logout: 'Logout',
+      addSession: 'Add Session',
+      editSession: 'Edit Session',
+      stats: {
+        total: 'Total Sessions',
+        completed: 'Completed',
+        scheduled: 'Scheduled',
+        cancelled: 'Cancelled'
+      },
+      sessions: 'Tutoring Sessions',
+      noSessions: 'No sessions available',
+      loading: 'Loading...',
+      filters: {
+        all: 'All',
+        scheduled: 'Scheduled',
+        inProgress: 'In Progress',
+        completed: 'Completed',
+        cancelled: 'Cancelled'
+      },
+      search: 'Search sessions...',
+      searchPlaceholder: 'Search sessions...',
+      filterAll: 'All',
+      filterVirtual: 'Virtual',
+      filterPresencial: 'In Person',
+      actions: {
+        join: 'Join',
+        start: 'Start',
+        cancel: 'Cancel',
+        complete: 'Complete',
+        viewDetails: 'View Details',
+        addNotes: 'Add Notes',
+        edit: 'Edit',
+        delete: 'Delete',
+        save: 'Save',
+        viewParticipants: 'View Participants'
+      },
+      form: {
+        selectSubject: 'Select subject',
+        title: 'Session title',
+        description: 'Description',
+        sessionType: 'Session type',
+        presencial: 'In-person',
+        virtual: 'Virtual',
+        date: 'Date',
+        time: 'Time',
+        duration: 'Duration (minutes)',
+        faculty: 'Faculty',
+        classroom: 'Classroom',
+        meetingUrl: 'Meeting URL',
+        save: 'Save',
+        cancel: 'Cancel'
+      },
+      messages: {
+        sessionCreated: 'Session created successfully',
+        sessionUpdated: 'Session updated successfully',
+        errorCreating: 'Error creating session',
+        errorUpdating: 'Error updating session',
+        confirmDelete: 'Are you sure you want to delete this session?'
+      },
+      status: {
+        scheduled: 'Scheduled',
+        in_progress: 'In Progress',
+        completed: 'Completed',
+        cancelled: 'Cancelled'
+      },
+      sessionType: {
+        presencial: 'In Person',
+        virtual: 'Virtual'
+      },
+      sessionInfo: {
+        status: 'Status',
+        type: 'Type',
+        duration: 'Duration',
+        location: 'Location',
+        subject: 'Subject',
+        participants: 'Participants',
+        startTime: 'Start Time',
+        endTime: 'End Time',
+        noParticipants: 'No participants yet'
+      },
+      studentInfo: {
+        name: 'Name',
+        email: 'Email',
+        phone: 'Phone',
+        joinedAt: 'Joined at'
+      },
+      location: 'Location',
+      meeting: 'Meeting',
+      subject: 'Subject',
+      duration: 'Duration',
+      noParticipants: 'No participants yet',
+      viewParticipants: 'View Participants'
+    }
+  }
+
+  const currentContent = content[language]
+
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-ES', {
       year: 'numeric',
@@ -555,6 +722,15 @@ export default function TutorSessionsPage() {
 
   const stats = getSessionStats()
 
+  const filteredSessions = sessions.filter(session => {
+    const matchesSearch = session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         session.subject_name.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesFilter = filter === 'all' || session.session_type === filter
+    
+    return matchesSearch && matchesFilter
+  })
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
@@ -576,7 +752,7 @@ export default function TutorSessionsPage() {
         </div>
 
         {/* Accessibility Panel */}
-        <AccessibilityPanel 
+        <AccessibilityPanel
           isOpen={isAccessibilityOpen}
           onClose={() => setIsAccessibilityOpen(false)}
         />
@@ -749,12 +925,11 @@ export default function TutorSessionsPage() {
                                   }`}>
                                     {session.session_type === 'presencial' ? 'Presencial' : 'Virtual'}
                                   </span>
+                                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    {session.participant_count} {currentContent.sessionInfo.participants}
+                                  </span>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
-                                  <div className="flex items-center space-x-2">
-                                    <User className="w-4 h-4" />
-                                    <span>{session.student_name || 'Sin asignar'}</span>
-                                  </div>
                                   <div className="flex items-center space-x-2">
                                     <Calendar className="w-4 h-4" />
                                     <span>{formatDate(session.start_time)}</span>
@@ -762,6 +937,10 @@ export default function TutorSessionsPage() {
                                   <div className="flex items-center space-x-2">
                                     <Clock className="w-4 h-4" />
                                     <span>{session.duration_minutes} min</span>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <User className="w-4 h-4" />
+                                    <span>{session.subject_name}</span>
                                   </div>
                                 </div>
                                 {session.description && (
@@ -783,68 +962,163 @@ export default function TutorSessionsPage() {
                                       </>
                                     )}
                                   </div>
-                                  {session.student_rating && (
-                                    <div className="flex items-center space-x-1">
-                                      <span className="text-sm text-gray-600">Rating:</span>
-                                      <div className="flex items-center">
-                                        {[...Array(5)].map((_, i) => (
-                                          <Star
-                                            key={i}
-                                            className={`w-4 h-4 ${
-                                              i < session.student_rating
-                                                ? 'text-yellow-400 fill-current'
-                                                : 'text-gray-300'
-                                            }`}
-                                          />
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
                                 </div>
                               </div>
-                              <div className="flex space-x-2 ml-4">
-                                {session.status === 'scheduled' && (
-                                  <>
-                                    <button
-                                      onClick={() => handleCompleteSession(session.id)}
-                                      className="p-2 text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
-                                      aria-label={currentContent.actions.complete}
-                                      title={currentContent.actions.complete}
-                                    >
-                                      <div className="flex items-center space-x-1">
-                                        <div className="w-2 h-2 bg-green-600 rounded-full"></div>
-                                        <span className="text-xs font-medium">{currentContent.actions.complete}</span>
-                                      </div>
-                                    </button>
-                                    <button
-                                      onClick={() => handleCancelSession(session.id)}
-                                      className="p-2 text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                                      aria-label={currentContent.actions.cancel}
-                                      title={currentContent.actions.cancel}
-                                    >
-                                      <div className="flex items-center space-x-1">
-                                        <div className="w-2 h-2 bg-red-600 rounded-full"></div>
-                                        <span className="text-xs font-medium">{currentContent.actions.cancel}</span>
-                                      </div>
-                                    </button>
-                                  </>
+                              <div className="flex flex-col space-y-2 ml-4">
+                                <div className="flex space-x-2">
+                                  {/* Mostrar botones de Completar/Cancelar para sesiones programadas */}
+                                  {session.status === 'scheduled' && (
+                                    <>
+                                      <button
+                                        onClick={() => handleCompleteSession(session.id)}
+                                        className="p-2 text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
+                                        aria-label={currentContent.actions.complete}
+                                        title={currentContent.actions.complete}
+                                      >
+                                        <div className="flex items-center space-x-1">
+                                          <Check className="w-3 h-3" />
+                                          <span className="text-xs font-medium">{currentContent.actions.complete}</span>
+                                        </div>
+                                      </button>
+                                      <button
+                                        onClick={() => handleCancelSession(session.id)}
+                                        className="p-2 text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                                        aria-label={currentContent.actions.cancel}
+                                        title={currentContent.actions.cancel}
+                                      >
+                                        <div className="flex items-center space-x-1">
+                                          <X className="w-3 h-3" />
+                                          <span className="text-xs font-medium">{currentContent.actions.cancel}</span>
+                                        </div>
+                                      </button>
+                                    </>
+                                  )}
+                                  
+                                  {/* TEMPORAL: Mostrar botones para todas las sesiones (para testing) */}
+                                  {session.status !== 'scheduled' && (
+                                    <>
+                                      <button
+                                        onClick={() => handleCompleteSession(session.id)}
+                                        className="p-2 text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 rounded-md transition-colors opacity-60"
+                                        aria-label={`${currentContent.actions.complete} (Demo)`}
+                                        title={`${currentContent.actions.complete} - Estado actual: ${session.status}`}
+                                      >
+                                        <div className="flex items-center space-x-1">
+                                          <Check className="w-3 h-3" />
+                                          <span className="text-xs font-medium">{currentContent.actions.complete}</span>
+                                        </div>
+                                      </button>
+                                      <button
+                                        onClick={() => handleCancelSession(session.id)}
+                                        className="p-2 text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 rounded-md transition-colors opacity-60"
+                                        aria-label={`${currentContent.actions.cancel} (Demo)`}
+                                        title={`${currentContent.actions.cancel} - Estado actual: ${session.status}`}
+                                      >
+                                        <div className="flex items-center space-x-1">
+                                          <X className="w-3 h-3" />
+                                          <span className="text-xs font-medium">{currentContent.actions.cancel}</span>
+                                        </div>
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    onClick={() => handleEditSession(session)}
+                                    className="p-1 text-blue-600 hover:text-blue-800"
+                                    aria-label={currentContent.actions.edit}
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteSession(session.id)}
+                                    className="p-1 text-red-600 hover:text-red-800"
+                                    aria-label={currentContent.actions.delete}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                                {session.participant_count > 0 && (
+                                  <button
+                                    onClick={() => {
+                                      if (selectedSession === session.id) {
+                                        setSelectedSession(null)
+                                      } else {
+                                        setSelectedSession(session.id)
+                                        loadSessionParticipants(session.id)
+                                      }
+                                    }}
+                                    className="p-2 text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 rounded-md transition-colors text-xs"
+                                    aria-label={currentContent.actions.viewParticipants}
+                                    title={currentContent.actions.viewParticipants}
+                                  >
+                                    <div className="flex items-center space-x-1">
+                                      <Users className="w-3 h-3" />
+                                      <span className="font-medium">
+                                        {selectedSession === session.id ? 'Ocultar' : currentContent.actions.viewParticipants}
+                                      </span>
+                                    </div>
+                                  </button>
                                 )}
-                                <button
-                                  onClick={() => handleEditSession(session)}
-                                  className="p-1 text-blue-600 hover:text-blue-800"
-                                  aria-label={currentContent.actions.edit}
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteSession(session.id)}
-                                  className="p-1 text-red-600 hover:text-red-800"
-                                  aria-label={currentContent.actions.delete}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
                               </div>
                             </div>
+                            
+                            {/* Participants Section */}
+                            {selectedSession === session.id && (
+                              <div className="mt-4 pt-4 border-t border-gray-200">
+                                <h5 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
+                                  <Users className="w-4 h-4 mr-2" />
+                                  {currentContent.sessionInfo.participants} ({participants.length})
+                                </h5>
+                                {participants.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {participants.map((participant) => (
+                                      <div key={participant.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                                        <div className="flex-shrink-0">
+                                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                                            <span className="text-white text-sm font-medium">
+                                              {participant.student_name.charAt(0).toUpperCase()}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center justify-between">
+                                            <div>
+                                              <p className="text-sm font-medium text-gray-900 truncate">
+                                                {participant.student_name}
+                                              </p>
+                                              <p className="text-xs text-gray-500 truncate">
+                                                {participant.student_email}
+                                              </p>
+                                            </div>
+                                            <div className="text-right">
+                                              <p className="text-xs text-gray-500">
+                                                Se unió: {new Date(participant.joined_at).toLocaleDateString('es-ES', {
+                                                  day: '2-digit',
+                                                  month: '2-digit',
+                                                  hour: '2-digit',
+                                                  minute: '2-digit'
+                                                })}
+                                              </p>
+                                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                                participant.status === 'joined' 
+                                                  ? 'bg-green-100 text-green-800' 
+                                                  : 'bg-gray-100 text-gray-800'
+                                              }`}>
+                                                {participant.status === 'joined' ? 'Activo' : 'Inactivo'}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4">
+                                    <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                    <p className="text-sm text-gray-500">{currentContent.sessionInfo.noParticipants}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

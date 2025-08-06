@@ -9,7 +9,7 @@ import { Menu, Calendar, Clock, MapPin, Video, User, Search, Filter, Accessibili
 import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
 
-interface Session {
+interface AvailableSession {
   id: string
   title: string
   description: string
@@ -22,11 +22,25 @@ interface Session {
   meeting_location?: string
   faculty?: string
   classroom?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+  // Tutor information
+  tutor_id: string
   tutor_name: string
   tutor_email: string
+  tutor_phone?: string
+  tutor_location?: string
+  tutor_education_level?: string
+  tutor_bio?: string
+  tutor_avatar_url?: string
+  // Subject information
+  subject_id: string
   subject_name: string
-  student_rating?: number
-  student_review?: string
+  subject_description?: string
+  // Participant information
+  participant_count: number
+  is_joined: boolean
 }
 
 export default function StudentTutoringPage() {
@@ -35,7 +49,7 @@ export default function StudentTutoringPage() {
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true)
   const [isAccessibilityOpen, setIsAccessibilityOpen] = useState(false)
   const { language } = useAccessibilityContext()
-  const [sessions, setSessions] = useState<Session[]>([])
+  const [availableSessions, setAvailableSessions] = useState<AvailableSession[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState('all')
@@ -45,102 +59,125 @@ export default function StudentTutoringPage() {
   }
 
   useEffect(() => {
-    loadSessions()
+    loadAvailableSessions()
   }, [])
 
-  const loadSessions = async () => {
+  const loadAvailableSessions = async () => {
     try {
       if (!user?.id) return
 
       const { data, error } = await supabase
-        .from('session_details')
+        .from('available_sessions')
         .select('*')
-        .eq('student_id', user.id)
         .order('start_time', { ascending: true })
 
       if (error) {
-        console.error('Error loading sessions:', error)
+        console.error('Error loading available sessions:', error)
         return
       }
 
-      setSessions(data || [])
+      setAvailableSessions(data || [])
     } catch (error) {
-      console.error('Error loading sessions:', error)
+      console.error('Error loading available sessions:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleAcceptSession = async (sessionId: string) => {
+  const handleJoinSession = async (sessionId: string) => {
     try {
-      const { error } = await supabase
-        .from('sessions')
-        .update({ status: 'scheduled' })
-        .eq('id', sessionId)
+      if (!user?.id) return
 
-      if (error) {
-        console.error('Error accepting session:', error)
+      // Primero verificar si ya existe un registro para este estudiante y sesión
+      const { data: existingParticipant, error: checkError } = await supabase
+        .from('session_participants')
+        .select('id, status')
+        .eq('session_id', sessionId)
+        .eq('student_id', user.id)
+        .single()
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        // Error diferente a "no encontrado"
+        console.error('Error checking existing participation:', checkError)
+        alert(language === 'es' ? 'Error al verificar participación' : 'Error checking participation')
         return
       }
 
-      await loadSessions()
-    } catch (error) {
-      console.error('Error accepting session:', error)
-    }
-  }
-
-  const handleRejectSession = async (sessionId: string) => {
-    try {
-      const { error } = await supabase
-        .from('sessions')
-        .update({ status: 'cancelled' })
-        .eq('id', sessionId)
+      let error
+      if (existingParticipant) {
+        // Si ya existe, actualizar el estado a 'joined'
+        const { error: updateError } = await supabase
+          .from('session_participants')
+          .update({ 
+            status: 'joined',
+            joined_at: new Date().toISOString()
+          })
+          .eq('id', existingParticipant.id)
+        error = updateError
+      } else {
+        // Si no existe, crear nuevo registro
+        const { error: insertError } = await supabase
+          .from('session_participants')
+          .insert({
+            session_id: sessionId,
+            student_id: user.id,
+            status: 'joined'
+          })
+        error = insertError
+      }
 
       if (error) {
-        console.error('Error rejecting session:', error)
+        console.error('Error joining session:', error)
+        alert(language === 'es' ? 'Error al unirse a la sesión' : 'Error joining session')
         return
       }
 
-      await loadSessions()
+      alert(language === 'es' ? 'Te has unido a la sesión exitosamente' : 'Successfully joined the session')
+      await loadAvailableSessions()
     } catch (error) {
-      console.error('Error rejecting session:', error)
+      console.error('Error joining session:', error)
+      alert(language === 'es' ? 'Error al unirse a la sesión' : 'Error joining session')
     }
   }
 
-  const handleRateSession = async (sessionId: string, rating: number, review: string) => {
+  const handleLeaveSession = async (sessionId: string) => {
     try {
+      if (!user?.id) return
+
       const { error } = await supabase
-        .from('sessions')
-        .update({ 
-          student_rating: rating,
-          student_review: review
-        })
-        .eq('id', sessionId)
+        .from('session_participants')
+        .update({ status: 'left' })
+        .eq('session_id', sessionId)
+        .eq('student_id', user.id)
 
       if (error) {
-        console.error('Error rating session:', error)
+        console.error('Error leaving session:', error)
+        alert(language === 'es' ? 'Error al salir de la sesión' : 'Error leaving session')
         return
       }
 
-      await loadSessions()
+      alert(language === 'es' ? 'Has salido de la sesión exitosamente' : 'Successfully left the session')
+      await loadAvailableSessions()
     } catch (error) {
-      console.error('Error rating session:', error)
+      console.error('Error leaving session:', error)
+      alert(language === 'es' ? 'Error al salir de la sesión' : 'Error leaving session')
     }
   }
+
+
 
   // Contenido basado en idioma
   const content = {
     es: {
-      title: 'Mis Tutorías',
+      title: 'Sesiones Disponibles',
       welcomeUser: 'Bienvenido,',
       logout: 'Cerrar Sesión',
       loading: 'Cargando...',
-      noSessions: 'No hay sesiones programadas',
+      noSessions: 'No hay sesiones disponibles',
       searchPlaceholder: 'Buscar sesiones...',
       filterAll: 'Todas',
-      filterScheduled: 'Programadas',
-      filterCompleted: 'Completadas',
-      filterCancelled: 'Canceladas',
+      filterVirtual: 'Virtual',
+      filterPresencial: 'Presencial',
       status: {
         scheduled: 'Programada',
         in_progress: 'En Progreso',
@@ -152,31 +189,46 @@ export default function StudentTutoringPage() {
         virtual: 'Virtual'
       },
       actions: {
-        accept: 'Aceptar',
-        reject: 'Rechazar',
-        rate: 'Calificar',
         join: 'Unirse',
+        leave: 'Salir',
+        contact: 'Contactar',
         view: 'Ver Detalles'
+      },
+      sessionInfo: {
+        status: 'Estado',
+        type: 'Tipo',
+        duration: 'Duración',
+        location: 'Ubicación',
+        subject: 'Materia',
+        tutor: 'Tutor',
+        participants: 'Participantes',
+        startTime: 'Hora de inicio',
+        endTime: 'Hora de fin'
+      },
+      tutorInfo: {
+        name: 'Nombre',
+        email: 'Email',
+        phone: 'Teléfono',
+        location: 'Ubicación',
+        education: 'Educación',
+        bio: 'Biografía'
       },
       location: 'Ubicación',
       meeting: 'Reunión',
       tutor: 'Tutor',
       subject: 'Materia',
-      duration: 'Duración',
-      rating: 'Calificación',
-      review: 'Reseña'
+      duration: 'Duración'
     },
     en: {
-      title: 'My Tutoring',
+      title: 'Available Sessions',
       welcomeUser: 'Welcome,',
       logout: 'Logout',
       loading: 'Loading...',
-      noSessions: 'No scheduled sessions',
+      noSessions: 'No available sessions',
       searchPlaceholder: 'Search sessions...',
       filterAll: 'All',
-      filterScheduled: 'Scheduled',
-      filterCompleted: 'Completed',
-      filterCancelled: 'Cancelled',
+      filterVirtual: 'Virtual',
+      filterPresencial: 'In Person',
       status: {
         scheduled: 'Scheduled',
         in_progress: 'In Progress',
@@ -184,23 +236,39 @@ export default function StudentTutoringPage() {
         cancelled: 'Cancelled'
       },
       sessionType: {
-        presencial: 'In-Person',
+        presencial: 'In Person',
         virtual: 'Virtual'
       },
       actions: {
-        accept: 'Accept',
-        reject: 'Reject',
-        rate: 'Rate',
         join: 'Join',
+        leave: 'Leave',
+        contact: 'Contact',
         view: 'View Details'
+      },
+      sessionInfo: {
+        status: 'Status',
+        type: 'Type',
+        duration: 'Duration',
+        location: 'Location',
+        subject: 'Subject',
+        tutor: 'Tutor',
+        participants: 'Participants',
+        startTime: 'Start Time',
+        endTime: 'End Time'
+      },
+      tutorInfo: {
+        name: 'Name',
+        email: 'Email',
+        phone: 'Phone',
+        location: 'Location',
+        education: 'Education',
+        bio: 'Bio'
       },
       location: 'Location',
       meeting: 'Meeting',
       tutor: 'Tutor',
       subject: 'Subject',
-      duration: 'Duration',
-      rating: 'Rating',
-      review: 'Review'
+      duration: 'Duration'
     }
   }
 
@@ -218,12 +286,12 @@ export default function StudentTutoringPage() {
     })
   }
 
-  const filteredSessions = sessions.filter(session => {
+  const filteredSessions = availableSessions.filter(session => {
     const matchesSearch = session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          session.tutor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          session.subject_name.toLowerCase().includes(searchTerm.toLowerCase())
     
-    const matchesFilter = filter === 'all' || session.status === filter
+    const matchesFilter = filter === 'all' || session.session_type === filter
     
     return matchesSearch && matchesFilter
   })
@@ -320,9 +388,8 @@ export default function StudentTutoringPage() {
                   className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="all">{currentContent.filterAll}</option>
-                  <option value="scheduled">{currentContent.filterScheduled}</option>
-                  <option value="completed">{currentContent.filterCompleted}</option>
-                  <option value="cancelled">{currentContent.filterCancelled}</option>
+                  <option value="virtual">{currentContent.filterVirtual}</option>
+                  <option value="presencial">{currentContent.filterPresencial}</option>
                 </select>
               </div>
             </div>
@@ -341,128 +408,140 @@ export default function StudentTutoringPage() {
               <div className="grid gap-6">
                 {filteredSessions.map((session) => (
                   <div key={session.id} className="bg-white rounded-lg shadow p-6">
-                    <div className="flex items-start justify-between">
+                    {/* Session Header */}
+                    <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <div className="flex items-center space-x-3 mb-2">
                           <h3 className="text-lg font-semibold text-gray-900">{session.title}</h3>
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            session.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
-                            session.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            session.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {currentContent.status[session.status as keyof typeof currentContent.status]}
-                          </span>
-                          <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
                             {currentContent.sessionType[session.session_type as keyof typeof currentContent.sessionType]}
+                          </span>
+                          <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                            {session.participant_count} {currentContent.sessionInfo.participants}
                           </span>
                         </div>
                         
                         <p className="text-gray-600 mb-4">{session.description}</p>
+                      </div>
+                      
+                      {/* Join/Leave Button */}
+                      <div className="ml-4">
+                        {session.is_joined ? (
+                          <button
+                            onClick={() => handleLeaveSession(session.id)}
+                            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium"
+                          >
+                            {currentContent.actions.leave}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleJoinSession(session.id)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+                          >
+                            {currentContent.actions.join}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Session Information */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-600">
+                            <strong>{currentContent.sessionInfo.startTime}:</strong> {formatDateTime(session.start_time)}
+                          </span>
+                        </div>
                         
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-600">
+                            <strong>{currentContent.sessionInfo.endTime}:</strong> {formatDateTime(session.end_time)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-600">
+                            <strong>{currentContent.sessionInfo.duration}:</strong> {session.duration_minutes} min
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <User className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-600">
+                            <strong>{currentContent.sessionInfo.subject}:</strong> {session.subject_name}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {session.session_type === 'presencial' ? (
                           <div className="flex items-center space-x-2">
-                            <Clock className="w-4 h-4 text-gray-400" />
+                            <MapPin className="w-4 h-4 text-gray-400" />
                             <span className="text-sm text-gray-600">
-                              {formatDateTime(session.start_time)} ({session.duration_minutes} min)
+                              <strong>{currentContent.sessionInfo.location}:</strong> {session.faculty} - {session.classroom}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2">
+                            <Video className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-600">
+                              <strong>{currentContent.sessionInfo.location}:</strong> {session.meeting_url ? 'Enlace disponible' : 'Enlace pendiente'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tutor Information */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <h4 className="text-md font-semibold text-gray-900 mb-3">{currentContent.tutorInfo.name}: {session.tutor_name}</h4>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-gray-600">
+                              <strong>{currentContent.tutorInfo.email}:</strong> {session.tutor_email}
                             </span>
                           </div>
                           
-                          <div className="flex items-center space-x-2">
-                            <User className="w-4 h-4 text-gray-400" />
-                            <span className="text-sm text-gray-600">
-                              {session.tutor_name} - {session.subject_name}
-                            </span>
-                          </div>
+                          {session.tutor_phone && (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-gray-600">
+                                <strong>{currentContent.tutorInfo.phone}:</strong> {session.tutor_phone}
+                              </span>
+                            </div>
+                          )}
                           
-                          {session.session_type === 'presencial' ? (
+                          {session.tutor_location && (
                             <div className="flex items-center space-x-2">
                               <MapPin className="w-4 h-4 text-gray-400" />
                               <span className="text-sm text-gray-600">
-                                {session.faculty} - {session.classroom}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center space-x-2">
-                              <Video className="w-4 h-4 text-gray-400" />
-                              <span className="text-sm text-gray-600">
-                                {session.meeting_url ? 'Enlace disponible' : 'Enlace pendiente'}
+                                <strong>{currentContent.tutorInfo.location}:</strong> {session.tutor_location}
                               </span>
                             </div>
                           )}
                         </div>
-
-                        {/* Rating for completed sessions */}
-                        {session.status === 'completed' && (
-                          <div className="mb-4">
-                            {session.student_rating ? (
-                              <div className="flex items-center space-x-2">
-                                <span className="text-sm font-medium text-gray-700">{currentContent.rating}:</span>
-                                <div className="flex items-center">
-                                  {[1, 2, 3, 4, 5].map((star) => (
-                                    <Star
-                                      key={star}
-                                      className={`w-4 h-4 ${
-                                        star <= (session.student_rating || 0) 
-                                          ? 'text-yellow-400 fill-current' 
-                                          : 'text-gray-300'
-                                      }`}
-                                    />
-                                  ))}
-                                </div>
-                                {session.student_review && (
-                                  <span className="text-sm text-gray-600 ml-2">"{session.student_review}"</span>
-                                )}
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  const rating = prompt('Califica la sesión (1-5):')
-                                  const review = prompt('Escribe una reseña (opcional):')
-                                  if (rating && parseInt(rating) >= 1 && parseInt(rating) <= 5) {
-                                    handleRateSession(session.id, parseInt(rating), review || '')
-                                  }
-                                }}
-                                className="text-sm text-blue-600 hover:text-blue-800"
-                              >
-                                {currentContent.actions.rate}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex flex-col space-y-2 ml-4">
-                        {session.status === 'scheduled' && (
-                          <>
-                            <button
-                              onClick={() => handleAcceptSession(session.id)}
-                              className="flex items-center space-x-1 px-3 py-1 bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition-colors"
-                            >
-                              <Check className="w-4 h-4" />
-                              <span className="text-sm">{currentContent.actions.accept}</span>
-                            </button>
-                            <button
-                              onClick={() => handleRejectSession(session.id)}
-                              className="flex items-center space-x-1 px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors"
-                            >
-                              <X className="w-4 h-4" />
-                              <span className="text-sm">{currentContent.actions.reject}</span>
-                            </button>
-                          </>
-                        )}
                         
-                        {session.status === 'scheduled' && session.session_type === 'virtual' && session.meeting_url && (
-                          <a
-                            href={session.meeting_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center space-x-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
-                          >
-                            <Video className="w-4 h-4" />
-                            <span className="text-sm">{currentContent.actions.join}</span>
-                          </a>
-                        )}
+                        <div className="space-y-2">
+                          {session.tutor_education_level && (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-gray-600">
+                                <strong>{currentContent.tutorInfo.education}:</strong> {session.tutor_education_level}
+                              </span>
+                            </div>
+                          )}
+                          
+                          {session.tutor_bio && (
+                            <div className="flex items-start space-x-2">
+                              <span className="text-sm text-gray-600">
+                                <strong>{currentContent.tutorInfo.bio}:</strong> {session.tutor_bio}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -5,6 +5,7 @@ import { ProtectedRoute } from '../../../../components/auth/ProtectedRoute'
 import { StudentSidebar } from '../../../../components/dashboard/StudentSidebar'
 import { AccessibilityPanel } from '../../../../components/accessibility/AccessibilityPanel'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Menu, User, Star, BookOpen, MapPin, Search, Filter, Accessibility, Globe, MessageSquare, Calendar, Phone, Mail } from 'lucide-react'
 import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
@@ -48,6 +49,34 @@ export default function StudentTutorsPage() {
 
   const loadTutors = async () => {
     try {
+      if (!user?.id) return
+
+      // First, get the subjects the student is registered for
+      const { data: studentSubjects, error: studentSubjectsError } = await supabase
+        .from('student_subjects')
+        .select(`
+          subject_id,
+          subjects (
+            id,
+            name
+          )
+        `)
+        .eq('student_id', user.id)
+        .eq('is_active', true)
+
+      if (studentSubjectsError) {
+        console.error('Error loading student subjects:', studentSubjectsError)
+        return
+      }
+
+      // If student has no registered subjects, show all tutors (or empty list)
+      const studentSubjectIds = studentSubjects?.map(ss => (ss.subjects as any)?.id).filter(Boolean) || []
+      
+      if (studentSubjectIds.length === 0) {
+        console.log('Student has no registered subjects, showing all tutors')
+        // You can choose to show all tutors or none - I'll show all for now
+      }
+
       // Get tutors from tutor_stats view
       const { data: tutorStats, error: statsError } = await supabase
         .from('tutor_stats')
@@ -58,16 +87,23 @@ export default function StudentTutorsPage() {
         return
       }
 
-      // Get tutor subjects
-      const { data: tutorSubjects, error: subjectsError } = await supabase
+      // Get tutor subjects - filter by student's subjects if they have any
+      let tutorSubjectsQuery = supabase
         .from('tutor_subjects')
         .select(`
           tutor_id,
           subjects (
+            id,
             name
           )
         `)
         .eq('is_active', true)
+
+      if (studentSubjectIds.length > 0) {
+        tutorSubjectsQuery = tutorSubjectsQuery.in('subject_id', studentSubjectIds)
+      }
+
+      const { data: tutorSubjects, error: subjectsError } = await tutorSubjectsQuery
 
       if (subjectsError) {
         console.error('Error loading tutor subjects:', subjectsError)
@@ -106,7 +142,7 @@ export default function StudentTutorsPage() {
           average_rating: stat.average_rating || 0,
           subjects: subjectNames
         }
-      }) || []
+      }).filter(tutor => tutor.subjects.length > 0) || [] // Only show tutors with matching subjects
 
       setTutors(tutorsData)
     } catch (error) {
@@ -118,21 +154,32 @@ export default function StudentTutorsPage() {
 
   const loadSubjects = async () => {
     try {
+      if (!user?.id) return
+
+      // Get subjects the student is registered for
       const { data, error } = await supabase
-        .from('subjects')
-        .select('name')
-        .order('name')
+        .from('student_subjects')
+        .select(`
+          subjects (
+            name
+          )
+        `)
+        .eq('student_id', user.id)
+        .eq('is_active', true)
 
       if (error) {
-        console.error('Error loading subjects:', error)
+        console.error('Error loading student subjects:', error)
         return
       }
 
-      setSubjects(data?.map(s => s.name) || [])
+      const subjectNames = data?.map(ss => (ss.subjects as any)?.name).filter(Boolean) || []
+      setSubjects(subjectNames)
     } catch (error) {
       console.error('Error loading subjects:', error)
     }
   }
+
+
 
   // Contenido basado en idioma
   const content = {
@@ -142,8 +189,10 @@ export default function StudentTutorsPage() {
       logout: 'Cerrar Sesión',
       loading: 'Cargando...',
       noTutors: 'No se encontraron tutores',
+      noSubjects: 'No tienes materias registradas',
       searchPlaceholder: 'Buscar tutores por nombre o materia...',
       filterAll: 'Todas las materias',
+
       actions: {
         contact: 'Contactar',
         requestSession: 'Solicitar Sesión',
@@ -167,8 +216,10 @@ export default function StudentTutorsPage() {
       logout: 'Logout',
       loading: 'Loading...',
       noTutors: 'No tutors found',
+      noSubjects: 'You have no registered subjects',
       searchPlaceholder: 'Search tutors by name or subject...',
       filterAll: 'All subjects',
+
       actions: {
         contact: 'Contact',
         requestSession: 'Request Session',
@@ -304,9 +355,30 @@ export default function StudentTutorsPage() {
               </div>
             ) : filteredTutors.length === 0 ? (
               <div className="text-center py-12">
-                <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">{currentContent.noTutors}</h3>
-                <p className="text-gray-500">Intenta ajustar tus filtros de búsqueda</p>
+                {subjects.length === 0 ? (
+                  <>
+                    <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">{currentContent.noSubjects}</h3>
+                                         <p className="text-gray-500 mb-4">
+                       {language === 'es' 
+                         ? 'Ve a "Mis Materias" en el sidebar para registrarte en materias' 
+                         : 'Go to "My Subjects" in the sidebar to register for subjects'
+                       }
+                     </p>
+                     <Link
+                       href="/dashboard/student/subjects"
+                       className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors inline-block"
+                     >
+                       {currentContent.registerSubjects}
+                     </Link>
+                  </>
+                ) : (
+                  <>
+                    <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">{currentContent.noTutors}</h3>
+                    <p className="text-gray-500">Intenta ajustar tus filtros de búsqueda</p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -437,6 +509,8 @@ export default function StudentTutorsPage() {
             )}
           </main>
         </div>
+
+
       </div>
     </ProtectedRoute>
   )

@@ -8,14 +8,13 @@ import {
   Calendar, 
   BookOpen, 
   GraduationCap, 
-  BarChart3, 
   FileText, 
   Settings, 
   LogOut,
   X,
   User,
   MessageSquare,
-  Star
+  Library
 } from 'lucide-react'
 import { useAuth } from '../../lib/auth/AuthContext'
 import { useAccessibilityContext } from '../../lib/accessibilityContext'
@@ -46,9 +45,8 @@ export function StudentSidebar({ isOpen, onClose, isDesktopSidebarOpen = true, o
         dashboard: 'Dashboard',
         myTutoring: 'Mis Tutorías',
         searchTutors: 'Buscar Tutores',
+        mySubjects: 'Mis Materias',
         studyResources: 'Recursos de Estudio',
-        myProgress: 'Mi Progreso',
-        grades: 'Calificaciones',
         messages: 'Mensajes',
         profile: 'Mi Perfil',
         settings: 'Configuración'
@@ -61,9 +59,8 @@ export function StudentSidebar({ isOpen, onClose, isDesktopSidebarOpen = true, o
         dashboard: 'Dashboard',
         myTutoring: 'My Tutoring',
         searchTutors: 'Search Tutors',
+        mySubjects: 'My Subjects',
         studyResources: 'Study Resources',
-        myProgress: 'My Progress',
-        grades: 'Grades',
         messages: 'Messages',
         profile: 'My Profile',
         settings: 'Settings'
@@ -93,22 +90,16 @@ export function StudentSidebar({ isOpen, onClose, isDesktopSidebarOpen = true, o
       current: pathname === '/dashboard/student/tutors'
     },
     {
+      name: currentContent.navigation.mySubjects,
+      href: '/dashboard/student/subjects',
+      icon: Library,
+      current: pathname === '/dashboard/student/subjects'
+    },
+    {
       name: currentContent.navigation.studyResources,
       href: '/dashboard/student/resources',
       icon: BookOpen,
       current: pathname === '/dashboard/student/resources'
-    },
-    {
-      name: currentContent.navigation.myProgress,
-      href: '/dashboard/student/progress',
-      icon: BarChart3,
-      current: pathname === '/dashboard/student/progress'
-    },
-    {
-      name: currentContent.navigation.grades,
-      href: '/dashboard/student/grades',
-      icon: Star,
-      current: pathname === '/dashboard/student/grades'
     },
     {
       name: currentContent.navigation.messages,
@@ -121,12 +112,6 @@ export function StudentSidebar({ isOpen, onClose, isDesktopSidebarOpen = true, o
       href: '/dashboard/student/profile',
       icon: User,
       current: pathname === '/dashboard/student/profile'
-    },
-    {
-      name: currentContent.navigation.settings,
-      href: '/dashboard/student/settings',
-      icon: Settings,
-      current: pathname === '/dashboard/student/settings'
     }
   ]
 

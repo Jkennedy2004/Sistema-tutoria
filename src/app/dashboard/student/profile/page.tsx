@@ -1,16 +1,27 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { 
+  User, 
+  Mail, 
+  Phone, 
+  MapPin, 
+  GraduationCap, 
+  Camera,
+  Save,
+  X,
+  Accessibility,
+  Globe
+} from 'lucide-react'
 import { useAuth } from '../../../../lib/auth/AuthContext'
-import { ProtectedRoute } from '../../../../components/auth/ProtectedRoute'
+import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { StudentSidebar } from '../../../../components/dashboard/StudentSidebar'
 import { AccessibilityPanel } from '../../../../components/accessibility/AccessibilityPanel'
-import { useState, useEffect } from 'react'
-import { Menu, User, Mail, Phone, MapPin, GraduationCap, Save, X, Accessibility, Globe, Camera } from 'lucide-react'
-import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { ProtectedRoute } from '../../../../components/auth/ProtectedRoute'
 
-interface ProfileData {
+interface ProfileFormData {
   name: string
   email: string
   phone: string
@@ -23,23 +34,13 @@ interface ProfileData {
 export default function StudentProfilePage() {
   const { user, logout } = useAuth()
   const router = useRouter()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true)
   const [isAccessibilityOpen, setIsAccessibilityOpen] = useState(false)
   const { language } = useAccessibilityContext()
-  const [profile, setProfile] = useState<ProfileData>({
-    name: '',
-    email: '',
-    phone: '',
-    location: '',
-    education_level: '',
-    bio: '',
-    avatar_url: ''
-  })
-  const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [editData, setEditData] = useState<ProfileData>({
+  const [profileData, setProfileData] = useState<ProfileFormData>({
     name: '',
     email: '',
     phone: '',
@@ -49,27 +50,78 @@ export default function StudentProfilePage() {
     avatar_url: ''
   })
 
-  const handleLogout = async () => {
-    await logout()
+  // Contenido basado en idioma
+  const content = {
+    es: {
+      title: 'Mi Perfil',
+      subtitle: 'Gestiona tu información personal',
+      form: {
+        name: 'Nombre completo',
+        email: 'Correo electrónico',
+        phone: 'Teléfono',
+        location: 'Ubicación',
+        education_level: 'Nivel de educación',
+        bio: 'Biografía',
+        avatar: 'Foto de perfil',
+        save: 'Guardar cambios',
+        cancel: 'Cancelar'
+      },
+      education_levels: {
+        high_school: 'Bachillerato',
+        undergraduate: 'Pregrado',
+        graduate: 'Posgrado',
+        phd: 'Doctorado',
+        other: 'Otro'
+      },
+      messages: {
+        profile_updated: 'Perfil actualizado correctamente',
+        error_updating: 'Error al actualizar el perfil',
+        loading: 'Cargando perfil...',
+        saving: 'Guardando...'
+      },
+      welcomeUser: 'Bienvenido,',
+      logout: 'Cerrar sesión'
+    },
+    en: {
+      title: 'My Profile',
+      subtitle: 'Manage your personal information',
+      form: {
+        name: 'Full name',
+        email: 'Email',
+        phone: 'Phone',
+        location: 'Location',
+        education_level: 'Education level',
+        bio: 'Biography',
+        avatar: 'Profile picture',
+        save: 'Save changes',
+        cancel: 'Cancel'
+      },
+      education_levels: {
+        high_school: 'High School',
+        undergraduate: 'Undergraduate',
+        graduate: 'Graduate',
+        phd: 'PhD',
+        other: 'Other'
+      },
+      messages: {
+        profile_updated: 'Profile updated successfully',
+        error_updating: 'Error updating profile',
+        loading: 'Loading profile...',
+        saving: 'Saving...'
+      },
+      welcomeUser: 'Welcome,',
+      logout: 'Logout'
+    }
   }
 
+  const currentContent = content[language]
+
   useEffect(() => {
-    console.log('StudentProfilePage useEffect - user:', user)
-    
     if (!user) {
-      console.log('No user found, redirecting to login')
       router.push('/auth/login')
       return
     }
 
-    // Check if user is a student
-    if (user.userType !== 'student') {
-      console.log('User is not a student, redirecting to appropriate dashboard')
-      router.push('/dashboard')
-      return
-    }
-
-    console.log('User found, loading profile for:', user.id)
     loadProfile()
   }, [user, router])
 
@@ -79,21 +131,6 @@ export default function StudentProfilePage() {
     try {
       setLoading(true)
       console.log('Loading profile for user:', user.id)
-      
-      // First, try to get the current session to ensure we're authenticated
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError) {
-        console.error('Session error:', sessionError)
-        return
-      }
-
-      if (!session) {
-        console.error('No active session')
-        return
-      }
-
-      console.log('Session found, user ID:', session.user.id)
       
       // Try direct query first, then fallback to RPC if needed
       let { data, error } = await supabase
@@ -129,7 +166,7 @@ export default function StudentProfilePage() {
       console.log('Profile data loaded:', data)
 
       if (data) {
-        const profileData = {
+        setProfileData({
           name: data.name || '',
           email: data.email || '',
           phone: data.phone || '',
@@ -137,10 +174,7 @@ export default function StudentProfilePage() {
           education_level: data.education_level || '',
           bio: data.bio || '',
           avatar_url: data.avatar_url || ''
-        }
-
-        setProfile(profileData)
-        setEditData(profileData)
+        })
       } else {
         console.log('No profile data found for user:', user.id)
         // If no profile exists, try to create one
@@ -188,133 +222,67 @@ export default function StudentProfilePage() {
     }
   }
 
+  const handleInputChange = (field: keyof ProfileFormData, value: string) => {
+    setProfileData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
   const handleSave = async () => {
     if (!user) return
 
     try {
       setSaving(true)
+      console.log('Saving profile data:', profileData)
+      
       const { error } = await supabase
         .from('profiles')
         .update({
-          name: editData.name,
-          phone: editData.phone,
-          location: editData.location,
-          education_level: editData.education_level,
-          bio: editData.bio,
-          avatar_url: editData.avatar_url,
+          name: profileData.name,
+          phone: profileData.phone,
+          location: profileData.location,
+          education_level: profileData.education_level,
+          bio: profileData.bio,
+          avatar_url: profileData.avatar_url,
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id)
 
       if (error) {
         console.error('Error updating profile:', error)
+        console.log('Showing error message:', currentContent.messages.error_updating)
         alert(currentContent.messages.error_updating)
         return
       }
 
-      setProfile(editData)
-      setIsEditing(false)
+      console.log('Profile updated successfully')
+      console.log('Showing success message:', currentContent.messages.profile_updated)
       alert(currentContent.messages.profile_updated)
     } catch (error) {
       console.error('Error in handleSave:', error)
+      console.log('Showing error message:', currentContent.messages.error_updating)
       alert(currentContent.messages.error_updating)
     } finally {
       setSaving(false)
     }
   }
 
-  const handleCancel = () => {
-    setEditData(profile)
-    setIsEditing(false)
+  const handleLogout = async () => {
+    await logout()
+    router.push('/')
   }
-
-  // Contenido basado en idioma
-  const content = {
-    es: {
-      title: 'Mi Perfil',
-      welcomeUser: 'Bienvenido,',
-      logout: 'Cerrar Sesión',
-      loading: 'Cargando...',
-      saving: 'Guardando...',
-      edit: 'Editar',
-      save: 'Guardar',
-      cancel: 'Cancelar',
-      fields: {
-        name: 'Nombre',
-        email: 'Correo Electrónico',
-        phone: 'Teléfono',
-        location: 'Ubicación',
-        education: 'Nivel Educativo',
-        bio: 'Biografía',
-        avatar: 'URL del Avatar'
-      },
-      educationLevels: {
-        'high_school': 'Bachillerato',
-        'undergraduate': 'Pregrado',
-        'graduate': 'Posgrado',
-        'phd': 'Doctorado',
-        'other': 'Otro'
-      },
-      placeholder: {
-        name: 'Ingresa tu nombre completo',
-        phone: 'Ingresa tu número de teléfono',
-        location: 'Ingresa tu ubicación',
-        bio: 'Cuéntanos sobre ti...',
-        avatar: 'https://ejemplo.com/avatar.jpg'
-      },
-      messages: {
-        profile_updated: 'Perfil actualizado correctamente',
-        error_updating: 'Error al actualizar el perfil'
-      }
-    },
-    en: {
-      title: 'My Profile',
-      welcomeUser: 'Welcome,',
-      logout: 'Logout',
-      loading: 'Loading...',
-      saving: 'Saving...',
-      edit: 'Edit',
-      save: 'Save',
-      cancel: 'Cancel',
-      fields: {
-        name: 'Name',
-        email: 'Email',
-        phone: 'Phone',
-        location: 'Location',
-        education: 'Education Level',
-        bio: 'Bio',
-        avatar: 'Avatar URL'
-      },
-      educationLevels: {
-        'high_school': 'High School',
-        'undergraduate': 'Undergraduate',
-        'graduate': 'Graduate',
-        'phd': 'PhD',
-        'other': 'Other'
-      },
-      placeholder: {
-        name: 'Enter your full name',
-        phone: 'Enter your phone number',
-        location: 'Enter your location',
-        bio: 'Tell us about yourself...',
-        avatar: 'https://example.com/avatar.jpg'
-      },
-      messages: {
-        profile_updated: 'Profile updated successfully',
-        error_updating: 'Error updating profile'
-      }
-    }
-  }
-
-  const currentContent = content[language]
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-lg text-gray-600">{currentContent.loading}</div>
+      <div className="min-h-screen bg-gray-50">
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">{currentContent.messages.loading}</p>
+          </div>
         </div>
-      </ProtectedRoute>
+      </div>
     )
   }
 
@@ -339,23 +307,23 @@ export default function StudentProfilePage() {
         </div>
 
         {/* Accessibility Panel */}
-        <AccessibilityPanel
+        <AccessibilityPanel 
           isOpen={isAccessibilityOpen}
           onClose={() => setIsAccessibilityOpen(false)}
         />
 
         {/* Mobile sidebar overlay */}
-        {sidebarOpen && (
+        {isSidebarOpen && (
           <div 
             className="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
+            onClick={() => setIsSidebarOpen(false)}
           />
         )}
 
         {/* Sidebar */}
         <StudentSidebar 
-          isOpen={sidebarOpen} 
-          onClose={() => setSidebarOpen(false)}
+          isOpen={isSidebarOpen} 
+          onClose={() => setIsSidebarOpen(false)}
           isDesktopSidebarOpen={desktopSidebarOpen}
           onToggleDesktopSidebar={() => setDesktopSidebarOpen(!desktopSidebarOpen)}
         />
@@ -367,7 +335,7 @@ export default function StudentProfilePage() {
               {/* Header */}
               <div className="px-6 py-4 border-b border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-900">{currentContent.title}</h2>
-                <p className="text-sm text-gray-600 mt-1">Gestiona tu información personal</p>
+                <p className="text-sm text-gray-600 mt-1">{currentContent.subtitle}</p>
               </div>
 
               {/* Form */}
@@ -376,9 +344,9 @@ export default function StudentProfilePage() {
                 <div className="flex items-center space-x-6">
                   <div className="relative">
                     <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center">
-                      {profile.avatar_url ? (
+                      {profileData.avatar_url ? (
                         <img 
-                          src={profile.avatar_url} 
+                          src={profileData.avatar_url} 
                           alt="Profile" 
                           className="w-20 h-20 rounded-full object-cover"
                         />
@@ -401,173 +369,134 @@ export default function StudentProfilePage() {
                   {/* Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {currentContent.fields.name}
+                      {currentContent.form.name}
                     </label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editData.name}
-                          onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                          className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder={currentContent.placeholder.name}
-                        />
-                      ) : (
-                        <div className="pl-10 w-full px-3 py-2 text-gray-900">
-                          {profile.name || 'No especificado'}
-                        </div>
-                      )}
+                      <input
+                        type="text"
+                        value={profileData.name}
+                        onChange={(e) => handleInputChange('name', e.target.value)}
+                        className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder={currentContent.form.name}
+                      />
                     </div>
                   </div>
 
                   {/* Email */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {currentContent.fields.email}
+                      {currentContent.form.email}
                     </label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                      <div className="pl-10 w-full px-3 py-2 text-gray-900">
-                        {profile.email}
-                      </div>
+                      <input
+                        type="email"
+                        value={profileData.email}
+                        onChange={(e) => handleInputChange('email', e.target.value)}
+                        className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder={currentContent.form.email}
+                        disabled
+                      />
                     </div>
                   </div>
 
                   {/* Phone */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {currentContent.fields.phone}
+                      {currentContent.form.phone}
                     </label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                      {isEditing ? (
-                        <input
-                          type="tel"
-                          value={editData.phone}
-                          onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
-                          className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder={currentContent.placeholder.phone}
-                        />
-                      ) : (
-                        <div className="pl-10 w-full px-3 py-2 text-gray-900">
-                          {profile.phone || 'No especificado'}
-                        </div>
-                      )}
+                      <input
+                        type="tel"
+                        value={profileData.phone}
+                        onChange={(e) => handleInputChange('phone', e.target.value)}
+                        className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder={currentContent.form.phone}
+                      />
                     </div>
                   </div>
 
                   {/* Location */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {currentContent.fields.location}
+                      {currentContent.form.location}
                     </label>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editData.location}
-                          onChange={(e) => setEditData({ ...editData, location: e.target.value })}
-                          className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder={currentContent.placeholder.location}
-                        />
-                      ) : (
-                        <div className="pl-10 w-full px-3 py-2 text-gray-900">
-                          {profile.location || 'No especificado'}
-                        </div>
-                      )}
+                      <input
+                        type="text"
+                        value={profileData.location}
+                        onChange={(e) => handleInputChange('location', e.target.value)}
+                        className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder={currentContent.form.location}
+                      />
                     </div>
                   </div>
 
                   {/* Education Level */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {currentContent.fields.education}
+                      {currentContent.form.education_level}
                     </label>
                     <div className="relative">
                       <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                      {isEditing ? (
-                        <select
-                          value={editData.education_level}
-                          onChange={(e) => setEditData({ ...editData, education_level: e.target.value })}
-                          className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="">{currentContent.fields.education}</option>
-                          <option value="high_school">{currentContent.educationLevels.high_school}</option>
-                          <option value="undergraduate">{currentContent.educationLevels.undergraduate}</option>
-                          <option value="graduate">{currentContent.educationLevels.graduate}</option>
-                          <option value="phd">{currentContent.educationLevels.phd}</option>
-                          <option value="other">{currentContent.educationLevels.other}</option>
-                        </select>
-                      ) : (
-                        <div className="pl-10 w-full px-3 py-2 text-gray-900">
-                          {profile.education_level ? currentContent.educationLevels[profile.education_level as keyof typeof currentContent.educationLevels] : 'No especificado'}
-                        </div>
-                      )}
+                      <select
+                        value={profileData.education_level}
+                        onChange={(e) => handleInputChange('education_level', e.target.value)}
+                        className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">{currentContent.form.education_level}</option>
+                        <option value="high_school">{currentContent.education_levels.high_school}</option>
+                        <option value="undergraduate">{currentContent.education_levels.undergraduate}</option>
+                        <option value="graduate">{currentContent.education_levels.graduate}</option>
+                        <option value="phd">{currentContent.education_levels.phd}</option>
+                        <option value="other">{currentContent.education_levels.other}</option>
+                      </select>
                     </div>
                   </div>
 
                   {/* Bio */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {currentContent.fields.bio}
+                      {currentContent.form.bio}
                     </label>
-                    {isEditing ? (
-                      <textarea
-                        value={editData.bio}
-                        onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
-                        rows={4}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder={currentContent.placeholder.bio}
-                      />
-                    ) : (
-                      <div className="w-full px-3 py-2 text-gray-900">
-                        {profile.bio || 'No especificado'}
-                      </div>
-                    )}
+                    <textarea
+                      value={profileData.bio}
+                      onChange={(e) => handleInputChange('bio', e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder={currentContent.form.bio}
+                    />
                   </div>
                 </div>
 
                 {/* Action buttons */}
                 <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
-                  {!isEditing ? (
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    >
+                  <button
+                    onClick={() => router.back()}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  >
+                    {currentContent.form.cancel}
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? (
                       <div className="flex items-center space-x-2">
-                        <User className="w-4 h-4" />
-                        <span>{currentContent.edit}</span>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>{currentContent.messages.saving}</span>
                       </div>
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        onClick={handleCancel}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                      >
-                        {currentContent.cancel}
-                      </button>
-                      <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {saving ? (
-                          <div className="flex items-center space-x-2">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                            <span>{currentContent.saving}</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-2">
-                            <Save className="w-4 h-4" />
-                            <span>{currentContent.save}</span>
-                          </div>
-                        )}
-                      </button>
-                    </>
-                  )}
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <Save className="w-4 h-4" />
+                        <span>{currentContent.form.save}</span>
+                      </div>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
