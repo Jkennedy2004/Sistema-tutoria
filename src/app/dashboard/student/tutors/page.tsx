@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { Menu, User, Star, BookOpen, MapPin, Search, Filter, Accessibility, Globe, MessageSquare, Calendar, Phone, Mail } from 'lucide-react'
 import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
+import { AdvancedFilters } from '../../../../components/messaging/AdvancedFilters'
 
 interface Tutor {
   id: string
@@ -37,6 +38,7 @@ export default function StudentTutorsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterSubject, setFilterSubject] = useState('all')
   const [subjects, setSubjects] = useState<string[]>([])
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({})
 
   const handleLogout = async () => {
     await logout()
@@ -154,31 +156,120 @@ export default function StudentTutorsPage() {
 
   const loadSubjects = async () => {
     try {
-      if (!user?.id) return
-
-      // Get subjects the student is registered for
       const { data, error } = await supabase
-        .from('student_subjects')
-        .select(`
-          subjects (
-            name
-          )
-        `)
-        .eq('student_id', user.id)
+        .from('subjects')
+        .select('name')
         .eq('is_active', true)
+        .order('name')
 
       if (error) {
-        console.error('Error loading student subjects:', error)
+        console.error('Error loading subjects:', error)
         return
       }
 
-      const subjectNames = data?.map(ss => (ss.subjects as any)?.name).filter(Boolean) || []
-      setSubjects(subjectNames)
+      setSubjects(data?.map(s => s.name) || [])
     } catch (error) {
       console.error('Error loading subjects:', error)
     }
   }
 
+  // Filter handlers
+  const handleFilterChange = (filters: Record<string, any>) => {
+    setActiveFilters(filters)
+  }
+
+  const handleClearFilters = () => {
+    setActiveFilters({})
+  }
+
+  // Advanced filters configuration for tutors
+  const advancedFilters = [
+    {
+      id: 'subject',
+      title: 'Materia',
+      type: 'select' as const,
+      icon: <BookOpen className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar materia',
+      options: [
+        { id: 'all', label: 'Todas las materias', value: 'all' },
+        ...subjects.map(subject => ({
+          id: subject,
+          label: subject,
+          value: subject
+        }))
+      ]
+    },
+    {
+      id: 'rating',
+      title: 'Calificación',
+      type: 'select' as const,
+      icon: <Star className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar calificación mínima',
+      options: [
+        { id: 'all', label: 'Cualquier calificación', value: 'all' },
+        { id: '4', label: '4+ estrellas', value: '4' },
+        { id: '3', label: '3+ estrellas', value: '3' },
+        { id: '2', label: '2+ estrellas', value: '2' },
+        { id: '1', label: '1+ estrella', value: '1' }
+      ]
+    },
+    {
+      id: 'experience',
+      title: 'Experiencia',
+      type: 'select' as const,
+      icon: <User className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar nivel de experiencia',
+      options: [
+        { id: 'all', label: 'Cualquier experiencia', value: 'all' },
+        { id: 'expert', label: 'Experto', value: 'expert' },
+        { id: 'advanced', label: 'Avanzado', value: 'advanced' },
+        { id: 'intermediate', label: 'Intermedio', value: 'intermediate' },
+        { id: 'beginner', label: 'Principiante', value: 'beginner' }
+      ]
+    },
+    {
+      id: 'sessions',
+      title: 'Sesiones Completadas',
+      type: 'select' as const,
+      icon: <Calendar className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar mínimo de sesiones',
+      options: [
+        { id: 'all', label: 'Cualquier cantidad', value: 'all' },
+        { id: '50', label: '50+ sesiones', value: '50' },
+        { id: '25', label: '25+ sesiones', value: '25' },
+        { id: '10', label: '10+ sesiones', value: '10' },
+        { id: '5', label: '5+ sesiones', value: '5' }
+      ]
+    },
+    {
+      id: 'location',
+      title: 'Ubicación',
+      type: 'search' as const,
+      icon: <MapPin className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Buscar por ubicación...',
+      options: tutors
+        .filter(tutor => tutor.location)
+        .map(tutor => ({
+          id: tutor.id,
+          label: tutor.location || '',
+          value: tutor.location || ''
+        }))
+    },
+    {
+      id: 'availability',
+      title: 'Disponibilidad',
+      type: 'select' as const,
+      icon: <Calendar className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar disponibilidad',
+      options: [
+        { id: 'all', label: 'Cualquier disponibilidad', value: 'all' },
+        { id: 'morning', label: 'Mañana', value: 'morning' },
+        { id: 'afternoon', label: 'Tarde', value: 'afternoon' },
+        { id: 'evening', label: 'Noche', value: 'evening' },
+        { id: 'weekend', label: 'Fin de semana', value: 'weekend' }
+      ]
+    }
+  ]
 
 
   // Contenido basado en idioma
@@ -208,7 +299,57 @@ export default function StudentTutorsPage() {
       location: 'Ubicación',
       education: 'Educación',
       bio: 'Biografía',
-      noBio: 'Sin biografía disponible'
+      noBio: 'Sin biografía disponible',
+      filters: {
+        title: 'Filtros Avanzados',
+        clearAll: 'Limpiar Todo',
+        apply: 'Aplicar',
+        saveFilters: 'Guardar Filtros',
+        savedFilters: 'Filtros Guardados',
+        noResults: 'No se encontraron tutores',
+        resultsFound: 'tutores de',
+        loading: 'Cargando...',
+        searchPlaceholder: 'Buscar tutores...',
+        dateFrom: 'Desde',
+        dateTo: 'Hasta',
+        status: {
+          all: 'Todos',
+          available: 'Disponibles',
+          busy: 'Ocupados',
+          offline: 'Desconectados'
+        },
+        rating: {
+          all: 'Todas',
+          excellent: 'Excelente',
+          good: 'Bueno',
+          average: 'Promedio'
+        },
+        experience: {
+          all: 'Todas',
+          expert: 'Experto',
+          advanced: 'Avanzado',
+          intermediate: 'Intermedio',
+          beginner: 'Principiante'
+        },
+        priority: {
+          all: 'Todas',
+          high: 'Alta',
+          normal: 'Normal',
+          low: 'Baja'
+        },
+        type: {
+          all: 'Todos',
+          text: 'Texto',
+          file: 'Archivo',
+          image: 'Imagen'
+        }
+      },
+      messages: {
+        noResults: 'No se encontraron tutores',
+        noResultsDescription: 'Intenta ajustar los filtros para encontrar más tutores',
+        tryDifferentFilters: 'Probar filtros diferentes'
+      },
+      registerSubjects: 'Registrarse en Materias'
     },
     en: {
       title: 'Search Tutors',
@@ -235,19 +376,123 @@ export default function StudentTutorsPage() {
       location: 'Location',
       education: 'Education',
       bio: 'Bio',
-      noBio: 'No bio available'
+      noBio: 'No bio available',
+      filters: {
+        title: 'Advanced Filters',
+        clearAll: 'Clear All',
+        apply: 'Apply',
+        saveFilters: 'Save Filters',
+        savedFilters: 'Saved Filters',
+        noResults: 'No tutors found',
+        resultsFound: 'tutors of',
+        loading: 'Loading...',
+        searchPlaceholder: 'Search tutors...',
+        dateFrom: 'From',
+        dateTo: 'To',
+        status: {
+          all: 'All',
+          available: 'Available',
+          busy: 'Busy',
+          offline: 'Offline'
+        },
+        rating: {
+          all: 'All',
+          excellent: 'Excellent',
+          good: 'Good',
+          average: 'Average'
+        },
+        experience: {
+          all: 'All',
+          expert: 'Expert',
+          advanced: 'Advanced',
+          intermediate: 'Intermediate',
+          beginner: 'Beginner'
+        },
+        priority: {
+          all: 'All',
+          high: 'High',
+          normal: 'Normal',
+          low: 'Low'
+        },
+        type: {
+          all: 'All',
+          text: 'Text',
+          file: 'File',
+          image: 'Image'
+        }
+      },
+      messages: {
+        noResults: 'No tutors found',
+        noResultsDescription: 'Try adjusting the filters to find more tutors',
+        tryDifferentFilters: 'Try different filters'
+      },
+      registerSubjects: 'Register for Subjects'
     }
   }
 
   const currentContent = content[language]
 
   const filteredTutors = tutors.filter(tutor => {
+    // Basic search filter
     const matchesSearch = tutor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          tutor.subjects.some(subject => subject.toLowerCase().includes(searchTerm.toLowerCase()))
     
+    // Basic filter
     const matchesFilter = filterSubject === 'all' || tutor.subjects.includes(filterSubject)
     
-    return matchesSearch && matchesFilter
+    // Advanced filters
+    let matchesAdvancedFilters = true
+    
+    // Subject filter
+    if (activeFilters.subject && activeFilters.subject !== 'all') {
+      matchesAdvancedFilters = matchesAdvancedFilters && tutor.subjects.includes(activeFilters.subject)
+    }
+    
+    // Rating filter
+    if (activeFilters.rating && activeFilters.rating !== 'all') {
+      const minRating = parseFloat(activeFilters.rating)
+      matchesAdvancedFilters = matchesAdvancedFilters && tutor.average_rating >= minRating
+    }
+    
+    // Experience filter (based on completed sessions)
+    if (activeFilters.experience && activeFilters.experience !== 'all') {
+      const sessionCount = tutor.completed_sessions
+      switch (activeFilters.experience) {
+        case 'expert':
+          matchesAdvancedFilters = matchesAdvancedFilters && sessionCount >= 100
+          break
+        case 'advanced':
+          matchesAdvancedFilters = matchesAdvancedFilters && sessionCount >= 50
+          break
+        case 'intermediate':
+          matchesAdvancedFilters = matchesAdvancedFilters && sessionCount >= 20
+          break
+        case 'beginner':
+          matchesAdvancedFilters = matchesAdvancedFilters && sessionCount >= 5
+          break
+      }
+    }
+    
+    // Sessions filter
+    if (activeFilters.sessions && activeFilters.sessions !== 'all') {
+      const minSessions = parseInt(activeFilters.sessions)
+      matchesAdvancedFilters = matchesAdvancedFilters && tutor.completed_sessions >= minSessions
+    }
+    
+    // Location filter
+    if (activeFilters.location) {
+      matchesAdvancedFilters = matchesAdvancedFilters && 
+        tutor.location?.toLowerCase().includes(activeFilters.location.toLowerCase())
+    }
+    
+    // Availability filter (placeholder - would need availability data)
+    if (activeFilters.availability && activeFilters.availability !== 'all') {
+      // This would need availability data from the database
+      // For now, we'll skip this filter
+      matchesAdvancedFilters = matchesAdvancedFilters && true
+    }
+    
+    return matchesSearch && matchesFilter && matchesAdvancedFilters
   })
 
   return (
@@ -320,32 +565,32 @@ export default function StudentTutorsPage() {
 
           {/* Main content area */}
           <main className="p-4 sm:p-6 lg:p-8">
-            {/* Search and Filter */}
-            <div className="mb-6 flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    placeholder={currentContent.searchPlaceholder}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Filter className="text-gray-400 w-5 h-5" />
-                <select
-                  value={filterSubject}
-                  onChange={(e) => setFilterSubject(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="all">{currentContent.filterAll}</option>
-                  {subjects.map((subject) => (
-                    <option key={subject} value={subject}>{subject}</option>
-                  ))}
-                </select>
+            {/* Advanced Filters */}
+            <div className="mb-6">
+              <AdvancedFilters
+                filters={advancedFilters}
+                activeFilters={activeFilters}
+                onFilterChange={handleFilterChange}
+                onClearFilters={handleClearFilters}
+                resultsCount={filteredTutors.length}
+                totalCount={tutors.length}
+                loading={loading}
+                userType="student"
+                content={currentContent}
+              />
+            </div>
+
+            {/* Basic Search */}
+            <div className="mb-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder={currentContent.searchPlaceholder}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
               </div>
             </div>
 

@@ -23,10 +23,15 @@ import {
   Plus,
   X,
   Smile,
-  GraduationCap
+  GraduationCap,
+  Calendar,
+  Star,
+  FileText,
+  Image
 } from 'lucide-react'
 import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
+import { AdvancedFilters } from '../../../../components/messaging/AdvancedFilters'
 
 interface Message {
   id: string
@@ -77,6 +82,7 @@ export default function TutorMessagesPage() {
   const [editingMessage, setEditingMessage] = useState<string>('')
   const [editContent, setEditContent] = useState('')
   const [showNewMessageModal, setShowNewMessageModal] = useState(false)
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const handleLogout = async () => {
@@ -406,6 +412,44 @@ export default function TutorMessagesPage() {
         sent: 'Enviados',
         conversations: 'Conversaciones'
       },
+      filters: {
+        title: 'Filtros Avanzados',
+        clearAll: 'Limpiar Todo',
+        apply: 'Aplicar',
+        saveFilters: 'Guardar Filtros',
+        savedFilters: 'Filtros Guardados',
+        noResults: 'No se encontraron resultados',
+        resultsFound: 'resultados de',
+        loading: 'Cargando...',
+        searchPlaceholder: 'Buscar en mensajes...',
+        dateFrom: 'Desde',
+        dateTo: 'Hasta',
+        status: {
+          all: 'Todos',
+          read: 'Leídos',
+          unread: 'No leídos',
+          sent: 'Enviados',
+          received: 'Recibidos',
+          edited: 'Editados'
+        },
+        priority: {
+          all: 'Todas',
+          high: 'Alta',
+          normal: 'Normal',
+          low: 'Baja'
+        },
+        type: {
+          all: 'Todos',
+          text: 'Texto',
+          file: 'Archivo',
+          image: 'Imagen'
+        }
+      },
+      messages: {
+        noResults: 'No se encontraron conversaciones',
+        noResultsDescription: 'Intenta ajustar los filtros para encontrar más resultados',
+        tryDifferentFilters: 'Probar filtros diferentes'
+      },
       messagePlaceholder: 'Escribe tu mensaje...',
       replyPlaceholder: 'Escribe tu respuesta...',
       editPlaceholder: 'Edita tu mensaje...',
@@ -449,6 +493,44 @@ export default function TutorMessagesPage() {
         unread: 'Unread',
         sent: 'Sent',
         conversations: 'Conversations'
+      },
+      filters: {
+        title: 'Advanced Filters',
+        clearAll: 'Clear All',
+        apply: 'Apply',
+        saveFilters: 'Save Filters',
+        savedFilters: 'Saved Filters',
+        noResults: 'No results found',
+        resultsFound: 'results of',
+        loading: 'Loading...',
+        searchPlaceholder: 'Search messages...',
+        dateFrom: 'From',
+        dateTo: 'To',
+        status: {
+          all: 'All',
+          read: 'Read',
+          unread: 'Unread',
+          sent: 'Sent',
+          received: 'Received',
+          edited: 'Edited'
+        },
+        priority: {
+          all: 'All',
+          high: 'High',
+          normal: 'Normal',
+          low: 'Low'
+        },
+        type: {
+          all: 'All',
+          text: 'Text',
+          file: 'File',
+          image: 'Image'
+        }
+      },
+      messages: {
+        noResults: 'No conversations found',
+        noResultsDescription: 'Try adjusting your filters to find more results',
+        tryDifferentFilters: 'Try different filters'
       },
       messagePlaceholder: 'Write your message...',
       replyPlaceholder: 'Write your reply...',
@@ -494,19 +576,188 @@ export default function TutorMessagesPage() {
     }
   }
 
+  // Advanced filtering logic for tutors
   const filteredConversations = conversations.filter(conversation => {
+    // Basic search filter
     const matchesSearch = conversation.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          conversation.lastMessage.toLowerCase().includes(searchTerm.toLowerCase())
     
+    // Basic filter
     const matchesFilter = filter === 'all' || 
                          (filter === 'unread' && conversation.unreadCount > 0)
     
-    return matchesSearch && matchesFilter
+    // Advanced filters
+    let matchesAdvancedFilters = true
+    
+    // Status filter
+    if (activeFilters.status) {
+      const conversationMessages = getConversationMessages(conversation.studentId)
+      const hasUnread = conversationMessages.some(m => !m.is_read && m.sender_id !== user?.id)
+      const hasRead = conversationMessages.some(m => m.is_read && m.sender_id !== user?.id)
+      
+      switch (activeFilters.status) {
+        case 'unread':
+          matchesAdvancedFilters = hasUnread
+          break
+        case 'read':
+          matchesAdvancedFilters = hasRead
+          break
+        case 'sent':
+          matchesAdvancedFilters = conversationMessages.some(m => m.sender_id === user?.id)
+          break
+        case 'received':
+          matchesAdvancedFilters = conversationMessages.some(m => m.receiver_id === user?.id)
+          break
+      }
+    }
+    
+    // Date range filter
+    if (activeFilters.date_from || activeFilters.date_to) {
+      const conversationMessages = getConversationMessages(conversation.studentId)
+      const lastMessageDate = new Date(conversation.lastMessageTime)
+      
+      if (activeFilters.date_from) {
+        const fromDate = new Date(activeFilters.date_from)
+        matchesAdvancedFilters = matchesAdvancedFilters && lastMessageDate >= fromDate
+      }
+      
+      if (activeFilters.date_to) {
+        const toDate = new Date(activeFilters.date_to)
+        matchesAdvancedFilters = matchesAdvancedFilters && lastMessageDate <= toDate
+      }
+    }
+    
+    // Student filter
+    if (activeFilters.student) {
+      matchesAdvancedFilters = matchesAdvancedFilters && conversation.studentId === activeFilters.student
+    }
+    
+    // Content type filter
+    if (activeFilters.content_type) {
+      const conversationMessages = getConversationMessages(conversation.studentId)
+      const hasMatchingContent = conversationMessages.some(m => {
+        switch (activeFilters.content_type) {
+          case 'text':
+            return !m.content.includes('http') && !m.content.includes('file')
+          case 'file':
+            return m.content.includes('file') || m.content.includes('document')
+          case 'image':
+            return m.content.includes('image') || m.content.includes('photo')
+          default:
+            return true
+        }
+      })
+      matchesAdvancedFilters = matchesAdvancedFilters && hasMatchingContent
+    }
+    
+    // Priority filter (based on unread count and message frequency)
+    if (activeFilters.priority) {
+      const conversationMessages = getConversationMessages(conversation.studentId)
+      const unreadCount = conversationMessages.filter(m => !m.is_read && m.sender_id !== user?.id).length
+      const messageCount = conversationMessages.length
+      
+      switch (activeFilters.priority) {
+        case 'high':
+          matchesAdvancedFilters = matchesAdvancedFilters && (unreadCount > 2 || messageCount > 10)
+          break
+        case 'normal':
+          matchesAdvancedFilters = matchesAdvancedFilters && (unreadCount <= 2 && messageCount <= 10)
+          break
+        case 'low':
+          matchesAdvancedFilters = matchesAdvancedFilters && (unreadCount === 0 && messageCount <= 5)
+          break
+      }
+    }
+    
+    return matchesSearch && matchesFilter && matchesAdvancedFilters
   })
 
   const totalMessages = messages.length
   const unreadMessages = messages.filter(m => !m.is_read && m.sender_id !== user?.id).length
   const sentMessages = messages.filter(m => m.sender_id === user?.id).length
+
+  // Filter handlers
+  const handleFilterChange = (filters: Record<string, any>) => {
+    setActiveFilters(filters)
+  }
+
+  const handleClearFilters = () => {
+    setActiveFilters({})
+  }
+
+  // Advanced filters configuration for tutors
+  const advancedFilters = [
+    {
+      id: 'status',
+      title: 'Estado',
+      type: 'select' as const,
+      icon: <MessageSquare className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar estado',
+      options: [
+        { id: 'all', label: currentContent.filters?.status?.all || 'Todos', value: 'all' },
+        { id: 'unread', label: currentContent.filters?.status?.unread || 'No leídos', value: 'unread' },
+        { id: 'read', label: currentContent.filters?.status?.read || 'Leídos', value: 'read' },
+        { id: 'sent', label: currentContent.filters?.status?.sent || 'Enviados', value: 'sent' },
+        { id: 'received', label: currentContent.filters?.status?.received || 'Recibidos', value: 'received' }
+      ]
+    },
+    {
+      id: 'student',
+      title: 'Estudiante',
+      type: 'select' as const,
+      icon: <User className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar estudiante',
+      options: students.map(student => ({
+        id: student.id,
+        label: student.name,
+        value: student.id
+      }))
+    },
+    {
+      id: 'date',
+      title: 'Rango de Fechas',
+      type: 'date' as const,
+      icon: <Calendar className="w-4 h-4 text-gray-500" />
+    },
+    {
+      id: 'content_type',
+      title: 'Tipo de Contenido',
+      type: 'select' as const,
+      icon: <FileText className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar tipo',
+      options: [
+        { id: 'all', label: currentContent.filters?.type?.all || 'Todos', value: 'all' },
+        { id: 'text', label: currentContent.filters?.type?.text || 'Texto', value: 'text' },
+        { id: 'file', label: currentContent.filters?.type?.file || 'Archivo', value: 'file' },
+        { id: 'image', label: currentContent.filters?.type?.image || 'Imagen', value: 'image' }
+      ]
+    },
+    {
+      id: 'priority',
+      title: 'Prioridad',
+      type: 'select' as const,
+      icon: <Star className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar prioridad',
+      options: [
+        { id: 'all', label: currentContent.filters?.priority?.all || 'Todas', value: 'all' },
+        { id: 'high', label: currentContent.filters?.priority?.high || 'Alta', value: 'high' },
+        { id: 'normal', label: currentContent.filters?.priority?.normal || 'Normal', value: 'normal' },
+        { id: 'low', label: currentContent.filters?.priority?.low || 'Baja', value: 'low' }
+      ]
+    },
+    {
+      id: 'search_content',
+      title: 'Buscar en Contenido',
+      type: 'search' as const,
+      icon: <Search className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Buscar en mensajes...',
+      options: messages.map(msg => ({
+        id: msg.id,
+        label: msg.content.substring(0, 50) + (msg.content.length > 50 ? '...' : ''),
+        value: msg.content
+      }))
+    }
+  ]
 
   return (
     <ProtectedRoute>
@@ -640,30 +891,32 @@ export default function TutorMessagesPage() {
               </div>
             </div>
 
-            {/* Search and Filter */}
-            <div className="mb-6 flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    placeholder={currentContent.searchPlaceholder}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Filter className="text-gray-400 w-5 h-5" />
-                <select
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                >
-                  <option value="all">{currentContent.filterAll}</option>
-                  <option value="unread">{currentContent.filterUnread}</option>
-                </select>
+            {/* Advanced Filters */}
+            <div className="mb-6">
+              <AdvancedFilters
+                filters={advancedFilters}
+                activeFilters={activeFilters}
+                onFilterChange={handleFilterChange}
+                onClearFilters={handleClearFilters}
+                resultsCount={filteredConversations.length}
+                totalCount={conversations.length}
+                loading={loading}
+                userType="tutor"
+                content={currentContent}
+              />
+            </div>
+
+            {/* Basic Search */}
+            <div className="mb-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder={currentContent.searchPlaceholder}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
               </div>
             </div>
 
@@ -686,7 +939,9 @@ export default function TutorMessagesPage() {
                       {filteredConversations.length === 0 ? (
                         <div className="p-6 text-center">
                           <Smile className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-500">{currentContent.noConversations}</p>
+                          <p className="text-gray-500">{currentContent.messages.noResults}</p>
+                          <p className="text-gray-500">{currentContent.messages.noResultsDescription}</p>
+                          <p className="text-gray-500">{currentContent.messages.tryDifferentFilters}</p>
                         </div>
                       ) : (
                         <div className="divide-y divide-gray-200">

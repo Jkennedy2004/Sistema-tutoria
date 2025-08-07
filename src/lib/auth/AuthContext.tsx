@@ -156,6 +156,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userType: credentials.userType
       })
 
+      // Verificar si el email ya existe antes del registro
+      console.log('🔍 Verificando si el email ya existe...')
+      const { data: existingProfile, error: checkError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', credentials.email.trim().toLowerCase())
+      
+      console.log('📊 Verificación de email existente:', { existingProfile, checkError })
+      
+      if (existingProfile && existingProfile.length > 0) {
+        console.log('❌ Email ya existe, registro cancelado')
+        setState(prev => ({ ...prev, error: 'Este email ya está registrado', loading: false }))
+        return { success: false, error: 'Este email ya está registrado' }
+      }
+
       // Primero, crear el usuario en Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email: credentials.email,
@@ -184,37 +199,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           console.log('Creating profile for user:', data.user.id)
           
-          // Intentar crear el perfil directamente primero
-          const { error: directError } = await supabase
-            .from('profiles')
-            .insert({
-              id: data.user.id,
-              email: credentials.email,
-              name: credentials.name,
+          // Usar solo la función RPC para crear el perfil
+          const { error: rpcError } = await supabase
+            .rpc('create_user_profile', {
+              user_id: data.user.id,
+              user_email: credentials.email,
+              user_name: credentials.name,
               user_type: credentials.userType
             })
           
-          if (directError) {
-            console.error('Error creating profile directly:', directError)
-            
-            // Si falla la inserción directa, intentar con la función RPC
-            const { error: rpcError } = await supabase
-              .rpc('create_user_profile', {
-                user_id: data.user.id,
-                user_email: credentials.email,
-                user_name: credentials.name,
-                user_type: credentials.userType
-              })
-            
-            if (rpcError) {
-              console.error('Error creating profile with RPC:', rpcError)
-              // Si ambos fallan, mostrar error pero no bloquear el registro
-              console.warn('Profile creation failed, but user registration was successful')
-            } else {
-              console.log('Profile created successfully with RPC')
-            }
+          if (rpcError) {
+            console.error('Error creating profile with RPC:', rpcError)
+            // No bloquear el registro si falla la creación del perfil
+            console.warn('Profile creation failed, but user registration was successful')
           } else {
-            console.log('Profile created successfully with direct insertion')
+            console.log('Profile created successfully with RPC')
           }
         } catch (profileError) {
           console.error('Error in profile creation:', profileError)

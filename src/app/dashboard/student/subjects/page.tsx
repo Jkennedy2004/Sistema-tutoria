@@ -19,7 +19,6 @@ interface StudentSubject {
   id: string
   subject_id: string
   registration_date: string
-  is_active: boolean
   subjects: Subject
 }
 
@@ -51,7 +50,6 @@ export default function StudentSubjectsPage() {
           id,
           subject_id,
           registration_date,
-          is_active,
           subjects (
             id,
             name,
@@ -59,7 +57,6 @@ export default function StudentSubjectsPage() {
           )
         `)
         .eq('student_id', user.id)
-        .eq('is_active', true)
         .order('registration_date', { ascending: false })
 
       if (error) {
@@ -99,19 +96,50 @@ export default function StudentSubjectsPage() {
 
       setRegistering(true)
 
-      const registrations = registeringSubjects.map(subjectId => ({
-        student_id: user.id,
-        subject_id: subjectId
-      }))
+      // Verificar registros existentes para cada materia
+      for (const subjectId of registeringSubjects) {
+        // Verificar si ya existe un registro (activo o inactivo)
+        const { data: existingRegistration, error: checkError } = await supabase
+          .from('student_subjects')
+          .select('id, is_active')
+          .eq('student_id', user.id)
+          .eq('subject_id', subjectId)
+          .maybeSingle()
 
-      const { error } = await supabase
-        .from('student_subjects')
-        .insert(registrations)
+        if (checkError) {
+          console.error('Error checking existing registration:', checkError)
+          continue
+        }
 
-      if (error) {
-        console.error('Error registering subjects:', error)
-        alert(language === 'es' ? 'Error al registrarse en las materias' : 'Error registering for subjects')
-        return
+        if (existingRegistration) {
+          // Si existe un registro inactivo, reactivarlo
+          if (!existingRegistration.is_active) {
+            const { error: updateError } = await supabase
+              .from('student_subjects')
+              .update({ 
+                is_active: true,
+                registration_date: new Date().toISOString()
+              })
+              .eq('id', existingRegistration.id)
+
+            if (updateError) {
+              console.error('Error reactivating registration:', updateError)
+            }
+          }
+          // Si ya está activo, no hacer nada
+        } else {
+          // Si no existe, crear nuevo registro
+          const { error: insertError } = await supabase
+            .from('student_subjects')
+            .insert({
+              student_id: user.id,
+              subject_id: subjectId
+            })
+
+          if (insertError) {
+            console.error('Error creating new registration:', insertError)
+          }
+        }
       }
 
       alert(language === 'es' ? 'Materias registradas correctamente' : 'Subjects registered successfully')
@@ -130,7 +158,7 @@ export default function StudentSubjectsPage() {
     try {
       const { error } = await supabase
         .from('student_subjects')
-        .update({ is_active: false })
+        .delete()
         .eq('id', studentSubjectId)
 
       if (error) {

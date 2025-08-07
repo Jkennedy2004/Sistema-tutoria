@@ -9,6 +9,7 @@ import { Menu, Calendar, Clock, User, MapPin, Plus, Filter, Search, Star, Edit, 
 import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
 import Link from 'next/link'
+import { AdvancedFilters } from '../../../../components/messaging/AdvancedFilters'
 
 interface Session {
   id: string
@@ -79,6 +80,7 @@ export default function TutorSessionsPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingSession, setEditingSession] = useState<Session | null>(null)
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({})
   
   // Form states
   const [selectedSubject, setSelectedSubject] = useState<string>('')
@@ -211,12 +213,9 @@ export default function TutorSessionsPage() {
   const loadSessionParticipants = async (sessionId: string) => {
     try {
       const { data, error } = await supabase
-        .from('session_participants_details')
+        .from('session_participants_view')
         .select('*')
         .eq('session_id', sessionId)
-        .eq('tutor_id', user?.id)
-        .eq('status', 'joined')
-        .order('joined_at', { ascending: true })
 
       if (error) {
         console.error('Error loading session participants:', error)
@@ -228,6 +227,92 @@ export default function TutorSessionsPage() {
       console.error('Error loading session participants:', error)
     }
   }
+
+  // Filter handlers
+  const handleFilterChange = (filters: Record<string, any>) => {
+    setActiveFilters(filters)
+  }
+
+  const handleClearFilters = () => {
+    setActiveFilters({})
+  }
+
+  // Advanced filters configuration for sessions
+  const advancedFilters = [
+    {
+      id: 'status',
+      title: 'Estado',
+      type: 'select' as const,
+      icon: <Calendar className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar estado',
+      options: [
+        { id: 'all', label: 'Todos los estados', value: 'all' },
+        { id: 'scheduled', label: 'Programada', value: 'scheduled' },
+        { id: 'in_progress', label: 'En progreso', value: 'in_progress' },
+        { id: 'completed', label: 'Completada', value: 'completed' },
+        { id: 'cancelled', label: 'Cancelada', value: 'cancelled' }
+      ]
+    },
+    {
+      id: 'subject',
+      title: 'Materia',
+      type: 'select' as const,
+      icon: <BookOpen className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar materia',
+      options: [
+        { id: 'all', label: 'Todas las materias', value: 'all' },
+        ...tutorSubjects.map(subject => ({
+          id: subject.subject_id,
+          label: subject.subject_name,
+          value: subject.subject_name
+        }))
+      ]
+    },
+    {
+      id: 'session_type',
+      title: 'Tipo de Sesión',
+      type: 'select' as const,
+      icon: <Video className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar tipo',
+      options: [
+        { id: 'all', label: 'Todos los tipos', value: 'all' },
+        { id: 'presencial', label: 'Presencial', value: 'presencial' },
+        { id: 'virtual', label: 'Virtual', value: 'virtual' }
+      ]
+    },
+    {
+      id: 'date',
+      title: 'Fecha',
+      type: 'date' as const,
+      icon: <Calendar className="w-4 h-4 text-gray-500" />
+    },
+    {
+      id: 'duration',
+      title: 'Duración',
+      type: 'select' as const,
+      icon: <Clock className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar duración',
+      options: [
+        { id: 'all', label: 'Cualquier duración', value: 'all' },
+        { id: 'short', label: 'Corta (< 30 min)', value: 'short' },
+        { id: 'medium', label: 'Media (30-90 min)', value: 'medium' },
+        { id: 'long', label: 'Larga (> 90 min)', value: 'long' }
+      ]
+    },
+    {
+      id: 'participants',
+      title: 'Participantes',
+      type: 'select' as const,
+      icon: <Users className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar participantes',
+      options: [
+        { id: 'all', label: 'Cualquier cantidad', value: 'all' },
+        { id: 'low', label: 'Pocos (1-3)', value: 'low' },
+        { id: 'medium', label: 'Medios (4-8)', value: 'medium' },
+        { id: 'high', label: 'Muchos (9+)', value: 'high' }
+      ]
+    }
+  ]
 
   // Función para abrir modal de edición
   const handleEditSession = (session: Session) => {
@@ -557,7 +642,43 @@ export default function TutorSessionsPage() {
       subject: 'Materia',
       duration: 'Duración',
       noParticipants: 'No hay participantes aún',
-      viewParticipants: 'Ver Participantes'
+      viewParticipants: 'Ver Participantes',
+      filters: {
+        title: 'Filtros Avanzados',
+        clearAll: 'Limpiar Todo',
+        apply: 'Aplicar',
+        saveFilters: 'Guardar Filtros',
+        savedFilters: 'Filtros Guardados',
+        noResults: 'No se encontraron sesiones',
+        resultsFound: 'sesiones de',
+        loading: 'Cargando...',
+        searchPlaceholder: 'Buscar sesiones...',
+        dateFrom: 'Desde',
+        dateTo: 'Hasta',
+        status: {
+          all: 'Todos',
+          available: 'Disponibles',
+          busy: 'Ocupados',
+          offline: 'Desconectados'
+        },
+        priority: {
+          all: 'Todas',
+          high: 'Alta',
+          normal: 'Normal',
+          low: 'Baja'
+        },
+        type: {
+          all: 'Todos',
+          text: 'Texto',
+          file: 'Archivo',
+          image: 'Imagen'
+        }
+      },
+      messages: {
+        noResults: 'No se encontraron sesiones',
+        noResultsDescription: 'Intenta ajustar los filtros para encontrar más sesiones',
+        tryDifferentFilters: 'Probar filtros diferentes'
+      }
     },
     en: {
       title: 'My Sessions',
@@ -653,7 +774,43 @@ export default function TutorSessionsPage() {
       subject: 'Subject',
       duration: 'Duration',
       noParticipants: 'No participants yet',
-      viewParticipants: 'View Participants'
+      viewParticipants: 'View Participants',
+      filters: {
+        title: 'Advanced Filters',
+        clearAll: 'Clear All',
+        apply: 'Apply Filters',
+        saveFilters: 'Save Filters',
+        savedFilters: 'Saved Filters',
+        noResults: 'No sessions found',
+        resultsFound: 'sessions of',
+        loading: 'Loading...',
+        searchPlaceholder: 'Search sessions...',
+        dateFrom: 'From',
+        dateTo: 'To',
+        status: {
+          all: 'All',
+          available: 'Available',
+          busy: 'Busy',
+          offline: 'Offline'
+        },
+        priority: {
+          all: 'All',
+          high: 'High',
+          normal: 'Normal',
+          low: 'Low'
+        },
+        type: {
+          all: 'All',
+          text: 'Text',
+          file: 'File',
+          image: 'Image'
+        }
+      },
+      messages: {
+        noResults: 'No sessions found',
+        noResultsDescription: 'Try adjusting filters to find more sessions',
+        tryDifferentFilters: 'Try different filters'
+      }
     }
   }
 
@@ -723,12 +880,77 @@ export default function TutorSessionsPage() {
   const stats = getSessionStats()
 
   const filteredSessions = sessions.filter(session => {
+    // Basic search filter
     const matchesSearch = session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          session.subject_name.toLowerCase().includes(searchTerm.toLowerCase())
     
+    // Basic filter
     const matchesFilter = filter === 'all' || session.session_type === filter
     
-    return matchesSearch && matchesFilter
+    // Advanced filters
+    let matchesAdvancedFilters = true
+    
+    // Status filter
+    if (activeFilters.status && activeFilters.status !== 'all') {
+      matchesAdvancedFilters = matchesAdvancedFilters && session.status === activeFilters.status
+    }
+    
+    // Subject filter
+    if (activeFilters.subject && activeFilters.subject !== 'all') {
+      matchesAdvancedFilters = matchesAdvancedFilters && session.subject_name === activeFilters.subject
+    }
+    
+    // Session type filter
+    if (activeFilters.session_type && activeFilters.session_type !== 'all') {
+      matchesAdvancedFilters = matchesAdvancedFilters && session.session_type === activeFilters.session_type
+    }
+    
+    // Date filter
+    if (activeFilters.date_from || activeFilters.date_to) {
+      const sessionDate = new Date(session.start_time)
+      if (activeFilters.date_from) {
+        matchesAdvancedFilters = matchesAdvancedFilters && 
+          sessionDate >= new Date(activeFilters.date_from)
+      }
+      if (activeFilters.date_to) {
+        matchesAdvancedFilters = matchesAdvancedFilters && 
+          sessionDate <= new Date(activeFilters.date_to)
+      }
+    }
+    
+    // Duration filter
+    if (activeFilters.duration && activeFilters.duration !== 'all') {
+      const duration = session.duration_minutes
+      switch (activeFilters.duration) {
+        case 'short':
+          matchesAdvancedFilters = matchesAdvancedFilters && duration < 30
+          break
+        case 'medium':
+          matchesAdvancedFilters = matchesAdvancedFilters && duration >= 30 && duration <= 90
+          break
+        case 'long':
+          matchesAdvancedFilters = matchesAdvancedFilters && duration > 90
+          break
+      }
+    }
+    
+    // Participants filter
+    if (activeFilters.participants && activeFilters.participants !== 'all') {
+      const participantCount = session.participant_count
+      switch (activeFilters.participants) {
+        case 'low':
+          matchesAdvancedFilters = matchesAdvancedFilters && participantCount >= 1 && participantCount <= 3
+          break
+        case 'medium':
+          matchesAdvancedFilters = matchesAdvancedFilters && participantCount >= 4 && participantCount <= 8
+          break
+        case 'high':
+          matchesAdvancedFilters = matchesAdvancedFilters && participantCount >= 9
+          break
+      }
+    }
+    
+    return matchesSearch && matchesFilter && matchesAdvancedFilters
   })
 
   return (
@@ -869,10 +1091,24 @@ export default function TutorSessionsPage() {
                   </div>
                 </div>
 
-                {/* Filters and Search */}
-                <div className="bg-white rounded-lg shadow p-6">
+                {/* Advanced Filters */}
+                <div className="mb-6">
+                  <AdvancedFilters
+                    filters={advancedFilters}
+                    activeFilters={activeFilters}
+                    onFilterChange={handleFilterChange}
+                    onClearFilters={handleClearFilters}
+                    resultsCount={filteredSessions.length}
+                    totalCount={sessions.length}
+                    loading={loading}
+                    userType="tutor"
+                    content={currentContent}
+                  />
+                </div>
+
+                {/* Basic Search and Filters */}
+                <div className="bg-white rounded-lg shadow p-6 mb-6">
                   <div className="flex flex-col sm:flex-row gap-4">
-                    {/* Search */}
                     <div className="flex-1">
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -886,7 +1122,7 @@ export default function TutorSessionsPage() {
                       </div>
                     </div>
 
-                    {/* Filters */}
+                    {/* Basic Filters */}
                     <div className="flex gap-2">
                       <select
                         value={filter}
@@ -909,9 +1145,9 @@ export default function TutorSessionsPage() {
                     <h3 className="text-lg font-medium text-gray-900">{currentContent.sessions}</h3>
                   </div>
                   <div className="p-6">
-                    {sessions.length > 0 ? (
+                    {filteredSessions.length > 0 ? (
                       <div className="space-y-4">
-                        {sessions.map((session) => (
+                        {filteredSessions.map((session) => (
                           <div key={session.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between">
                               <div className="flex-1">

@@ -240,6 +240,14 @@ export default function TutorResourcesPage() {
       })) || []
 
       setTutorSubjects(transformedData)
+      
+      // Si no hay materias registradas, mostrar alerta
+      if (transformedData.length === 0) {
+        alert(language === 'es' 
+          ? 'No tienes materias registradas. Registra materias primero para poder subir recursos.' 
+          : 'You have no registered subjects. Register subjects first to upload resources.'
+        )
+      }
     } catch (error) {
       console.error('Error loading tutor subjects:', error)
     }
@@ -306,32 +314,56 @@ export default function TutorResourcesPage() {
 
   // Función para subir archivo
   const uploadFile = async (file: File): Promise<string> => {
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${Math.random()}.${fileExt}`
-    const filePath = `${user?.id}/${fileName}`
+    try {
+      const fileExt = file.name.split('.').pop()
+      const timestamp = Date.now()
+      const fileName = `${timestamp}_${Math.random().toString(36).substring(2)}.${fileExt}`
+      const filePath = `${user?.id}/${fileName}`
 
-    const { error: uploadError } = await supabase.storage
-      .from('user-files')
-      .upload(filePath, file)
+      console.log('📤 Subiendo archivo:', file.name, 'a:', filePath)
 
-    if (uploadError) throw uploadError
+      const { error: uploadError } = await supabase.storage
+        .from('user-files')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('user-files')
-      .getPublicUrl(filePath)
+      if (uploadError) {
+        console.error('❌ Error al subir archivo:', uploadError)
+        throw uploadError
+      }
 
-    return publicUrl
+      console.log('✅ Archivo subido exitosamente')
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('user-files')
+        .getPublicUrl(filePath)
+
+      return publicUrl
+    } catch (error) {
+      console.error('❌ Error en uploadFile:', error)
+      throw error
+    }
   }
 
   // Función para agregar recurso
   const handleAddResource = async () => {
-    if (!selectedSubject || !title || !file || !user?.id) return
+    if (!selectedSubject || !title || !file || !user?.id) {
+      alert(language === 'es' 
+        ? 'Por favor completa todos los campos requeridos' 
+        : 'Please complete all required fields'
+      )
+      return
+    }
 
     try {
       setUploading(true)
+      console.log('🚀 Iniciando subida de recurso...')
 
       // Subir archivo
       const fileUrl = await uploadFile(file)
+      console.log('📁 URL del archivo:', fileUrl)
 
       // Crear recurso en la base de datos
       const { error } = await supabase
@@ -348,7 +380,12 @@ export default function TutorResourcesPage() {
           download_count: 0
         })
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Error al crear recurso en BD:', error)
+        throw error
+      }
+
+      console.log('✅ Recurso creado exitosamente')
 
       // Recargar recursos
       await loadResources()
@@ -361,8 +398,17 @@ export default function TutorResourcesPage() {
       setFile(null)
       setShowAddModal(false)
 
+      alert(language === 'es' 
+        ? 'Recurso subido exitosamente' 
+        : 'Resource uploaded successfully'
+      )
+
     } catch (error) {
-      console.error('Error adding resource:', error)
+      console.error('❌ Error adding resource:', error)
+      alert(language === 'es' 
+        ? 'Error al subir el recurso. Intenta de nuevo.' 
+        : 'Error uploading resource. Please try again.'
+      )
     } finally {
       setUploading(false)
     }
@@ -524,6 +570,25 @@ export default function TutorResourcesPage() {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
                   <p className="text-gray-600">{currentContent.loading}</p>
                 </div>
+              </div>
+            ) : tutorSubjects.length === 0 ? (
+              <div className="text-center py-12">
+                <BookMarked className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {language === 'es' ? 'No tienes materias registradas' : 'You have no registered subjects'}
+                </h3>
+                <p className="text-gray-500 mb-4">
+                  {language === 'es' 
+                    ? 'Registra materias primero para poder subir recursos de estudio' 
+                    : 'Register subjects first to upload study resources'
+                  }
+                </p>
+                <button
+                  onClick={() => window.location.href = '/dashboard/tutor/subjects'}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  {language === 'es' ? 'Registrar Materias' : 'Register Subjects'}
+                </button>
               </div>
             ) : (
               <div className="space-y-6">

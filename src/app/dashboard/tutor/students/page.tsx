@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react'
 import { Menu, Users, User, Mail, Phone, Calendar, Star, Accessibility, Globe, MessageSquare } from 'lucide-react'
 import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
+import { AdvancedFilters } from '../../../../components/messaging/AdvancedFilters'
 
 interface Student {
   id: string
@@ -32,6 +33,7 @@ export default function TutorStudentsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({})
 
   // Contenido basado en idioma
   const content = {
@@ -54,6 +56,42 @@ export default function TutorStudentsPage() {
         lastSession: 'Última sesión',
         contact: 'Contactar',
         viewProfile: 'Ver Perfil'
+      },
+      filters: {
+        title: 'Filtros Avanzados',
+        clearAll: 'Limpiar Todo',
+        apply: 'Aplicar',
+        saveFilters: 'Guardar Filtros',
+        savedFilters: 'Filtros Guardados',
+        noResults: 'No se encontraron estudiantes',
+        resultsFound: 'estudiantes de',
+        loading: 'Cargando...',
+        searchPlaceholder: 'Buscar estudiantes...',
+        dateFrom: 'Desde',
+        dateTo: 'Hasta',
+        status: {
+          all: 'Todos',
+          available: 'Disponibles',
+          busy: 'Ocupados',
+          offline: 'Desconectados'
+        },
+        priority: {
+          all: 'Todas',
+          high: 'Alta',
+          normal: 'Normal',
+          low: 'Baja'
+        },
+        type: {
+          all: 'Todos',
+          text: 'Texto',
+          file: 'Archivo',
+          image: 'Imagen'
+        }
+      },
+      messages: {
+        noResults: 'No se encontraron estudiantes',
+        noResultsDescription: 'Intenta ajustar los filtros para encontrar más estudiantes',
+        tryDifferentFilters: 'Probar filtros diferentes'
       }
     },
     en: {
@@ -75,6 +113,42 @@ export default function TutorStudentsPage() {
         lastSession: 'Last session',
         contact: 'Contact',
         viewProfile: 'View Profile'
+      },
+      filters: {
+        title: 'Advanced Filters',
+        clearAll: 'Clear All',
+        apply: 'Apply',
+        saveFilters: 'Save Filters',
+        savedFilters: 'Saved Filters',
+        noResults: 'No students found',
+        resultsFound: 'students of',
+        loading: 'Loading...',
+        searchPlaceholder: 'Search students...',
+        dateFrom: 'From',
+        dateTo: 'To',
+        status: {
+          all: 'All',
+          available: 'Available',
+          busy: 'Busy',
+          offline: 'Offline'
+        },
+        priority: {
+          all: 'All',
+          high: 'High',
+          normal: 'Normal',
+          low: 'Low'
+        },
+        type: {
+          all: 'All',
+          text: 'Text',
+          file: 'File',
+          image: 'Image'
+        }
+      },
+      messages: {
+        noResults: 'No students found',
+        noResultsDescription: 'Try adjusting the filters to find more students',
+        tryDifferentFilters: 'Try different filters'
       }
     }
   }
@@ -99,37 +173,83 @@ export default function TutorStudentsPage() {
         .eq('tutor_id', user.id)
         .not('student_id', 'is', null)
 
-      if (sessionsError) throw sessionsError
+      if (sessionsError) {
+        console.error('Error loading sessions data:', sessionsError)
+        return
+      }
 
-      // Agrupar por estudiante y obtener estadísticas
-      const studentMap = new Map<string, Student>()
+      // Obtener detalles completos de cada estudiante
+      const uniqueStudents = [...new Set(sessionsData?.map(s => s.student_id))].filter(Boolean)
       
-      sessionsData?.forEach(session => {
-        if (!studentMap.has(session.student_id)) {
-          studentMap.set(session.student_id, {
-            id: session.student_id,
-            name: session.student_name,
-            email: session.student_email,
-            avatar_url: '',
-            total_sessions: 0,
-            completed_sessions: 0,
-            average_rating: 0,
-            last_session: '',
-            subjects: []
-          })
-        }
-        
-        const student = studentMap.get(session.student_id)!
-        student.total_sessions++
-        
-        // Obtener más detalles de las sesiones para cada estudiante
-        loadStudentDetails(session.student_id, student)
-      })
+      if (uniqueStudents.length === 0) {
+        setStudents([])
+        setLoading(false)
+        return
+      }
 
-      // Convertir map a array
-      const studentsArray = Array.from(studentMap.values())
-      setStudents(studentsArray)
+      const studentsData = await Promise.all(
+        uniqueStudents.map(async (studentId) => {
+          // Obtener información del perfil del estudiante
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', studentId)
+            .single()
 
+          if (profileError) {
+            console.error('Error loading student profile:', profileError)
+            return null
+          }
+
+          // Obtener estadísticas de sesiones del estudiante
+          const { data: sessionStats, error: statsError } = await supabase
+            .from('session_details')
+            .select('*')
+            .eq('tutor_id', user.id)
+            .eq('student_id', studentId)
+
+          if (statsError) {
+            console.error('Error loading session stats:', profileError)
+            return null
+          }
+
+          const totalSessions = sessionStats?.length || 0
+          const completedSessions = sessionStats?.filter(s => s.status === 'completed').length || 0
+          const lastSession = sessionStats?.sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())[0]?.start_time
+
+          // Obtener materias del estudiante
+          const { data: studentSubjects, error: subjectsError } = await supabase
+            .from('student_subjects')
+            .select(`
+              subjects (
+                name
+              )
+            `)
+            .eq('student_id', studentId)
+            .eq('is_active', true)
+
+          if (subjectsError) {
+            console.error('Error loading student subjects:', subjectsError)
+          }
+
+          const subjects = studentSubjects?.map(ss => (ss.subjects as any)?.name).filter(Boolean) || []
+
+          return {
+            id: studentId,
+            name: profileData?.name || 'Estudiante',
+            email: profileData?.email || '',
+            avatar_url: profileData?.avatar_url || '',
+            total_sessions: totalSessions,
+            completed_sessions: completedSessions,
+            average_rating: 0, // Placeholder - would need rating data
+            last_session: lastSession || '',
+            subjects: subjects
+          }
+        })
+      )
+
+      const validStudents = studentsData.filter(Boolean) as Student[]
+      setStudents(validStudents)
     } catch (error) {
       console.error('Error loading students:', error)
     } finally {
@@ -137,41 +257,100 @@ export default function TutorStudentsPage() {
     }
   }
 
-  // Función para cargar detalles específicos de cada estudiante
-  const loadStudentDetails = async (studentId: string, student: Student) => {
-    try {
-      // Obtener sesiones completadas y ratings
-      const { data: sessionsData, error: sessionsError } = await supabase
-        .from('session_details')
-        .select('status, student_rating, subject_name, start_time')
-        .eq('tutor_id', user?.id)
-        .eq('student_id', studentId)
-
-      if (sessionsError) throw sessionsError
-
-      const completedSessions = sessionsData?.filter(s => s.status === 'completed') || []
-      const ratedSessions = sessionsData?.filter(s => s.student_rating) || []
-      
-      // Calcular estadísticas
-      student.completed_sessions = completedSessions.length
-      student.average_rating = ratedSessions.length > 0 
-        ? ratedSessions.reduce((sum, s) => sum + (s.student_rating || 0), 0) / ratedSessions.length
-        : 0
-      
-      // Obtener última sesión
-      const sortedSessions = sessionsData?.sort((a, b) => 
-        new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
-      ) || []
-      student.last_session = sortedSessions[0]?.start_time || ''
-      
-      // Obtener materias únicas
-      const subjects = new Set(sessionsData?.map(s => s.subject_name) || [])
-      student.subjects = Array.from(subjects)
-
-    } catch (error) {
-      console.error('Error loading student details:', error)
-    }
+  // Filter handlers
+  const handleFilterChange = (filters: Record<string, any>) => {
+    setActiveFilters(filters)
   }
+
+  const handleClearFilters = () => {
+    setActiveFilters({})
+  }
+
+  // Advanced filters configuration for students
+  const advancedFilters = [
+    {
+      id: 'status',
+      title: 'Estado',
+      type: 'select' as const,
+      icon: <User className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar estado',
+      options: [
+        { id: 'all', label: 'Todos los estados', value: 'all' },
+        { id: 'active', label: 'Activo', value: 'active' },
+        { id: 'inactive', label: 'Inactivo', value: 'inactive' },
+        { id: 'new', label: 'Nuevo', value: 'new' }
+      ]
+    },
+    {
+      id: 'subject',
+      title: 'Materia',
+      type: 'select' as const,
+      icon: <Calendar className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar materia',
+      options: [
+        { id: 'all', label: 'Todas las materias', value: 'all' },
+        ...Array.from(new Set(students.flatMap(s => s.subjects))).map(subject => ({
+          id: subject,
+          label: subject,
+          value: subject
+        }))
+      ]
+    },
+    {
+      id: 'sessions',
+      title: 'Sesiones Completadas',
+      type: 'select' as const,
+      icon: <Calendar className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar mínimo de sesiones',
+      options: [
+        { id: 'all', label: 'Cualquier cantidad', value: 'all' },
+        { id: '10', label: '10+ sesiones', value: '10' },
+        { id: '5', label: '5+ sesiones', value: '5' },
+        { id: '1', label: '1+ sesión', value: '1' }
+      ]
+    },
+    {
+      id: 'rating',
+      title: 'Calificación',
+      type: 'select' as const,
+      icon: <Star className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar calificación mínima',
+      options: [
+        { id: 'all', label: 'Cualquier calificación', value: 'all' },
+        { id: '4', label: '4+ estrellas', value: '4' },
+        { id: '3', label: '3+ estrellas', value: '3' },
+        { id: '2', label: '2+ estrellas', value: '2' },
+        { id: '1', label: '1+ estrella', value: '1' }
+      ]
+    },
+    {
+      id: 'last_activity',
+      title: 'Última Actividad',
+      type: 'select' as const,
+      icon: <Calendar className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar período',
+      options: [
+        { id: 'all', label: 'Cualquier período', value: 'all' },
+        { id: 'week', label: 'Última semana', value: 'week' },
+        { id: 'month', label: 'Último mes', value: 'month' },
+        { id: 'quarter', label: 'Último trimestre', value: 'quarter' },
+        { id: 'year', label: 'Último año', value: 'year' }
+      ]
+    },
+    {
+      id: 'progress',
+      title: 'Progreso',
+      type: 'select' as const,
+      icon: <Users className="w-4 h-4 text-gray-500" />,
+      placeholder: 'Seleccionar nivel de progreso',
+      options: [
+        { id: 'all', label: 'Cualquier progreso', value: 'all' },
+        { id: 'beginner', label: 'Principiante', value: 'beginner' },
+        { id: 'intermediate', label: 'Intermedio', value: 'intermediate' },
+        { id: 'advanced', label: 'Avanzado', value: 'advanced' }
+      ]
+    }
+  ]
 
   useEffect(() => {
     loadStudents()
@@ -189,15 +368,111 @@ export default function TutorStudentsPage() {
   const getStats = () => {
     const total = students.length
     const active = students.filter(s => s.total_sessions > 0).length
-    const totalSessions = students.reduce((sum, s) => sum + s.total_sessions, 0)
-    const averageRating = students.length > 0 
-      ? students.reduce((sum, s) => sum + s.average_rating, 0) / students.length
+    const sessions = students.reduce((sum, s) => sum + s.total_sessions, 0)
+    const rating = students.length > 0 
+      ? students.reduce((sum, s) => sum + s.average_rating, 0) / students.length 
       : 0
 
-    return { total, active, sessions: totalSessions, rating: Math.round(averageRating * 10) / 10 }
+    return { total, active, sessions, rating }
   }
 
   const stats = getStats()
+
+  const filteredStudents = students.filter(student => {
+    // Basic search filter
+    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         student.email.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    // Advanced filters
+    let matchesAdvancedFilters = true
+    
+    // Status filter
+    if (activeFilters.status && activeFilters.status !== 'all') {
+      switch (activeFilters.status) {
+        case 'active':
+          matchesAdvancedFilters = matchesAdvancedFilters && student.total_sessions > 0
+          break
+        case 'inactive':
+          matchesAdvancedFilters = matchesAdvancedFilters && student.total_sessions === 0
+          break
+        case 'new':
+          // Consider new if last session is within last 30 days
+          const lastSessionDate = student.last_session ? new Date(student.last_session) : null
+          const thirtyDaysAgo = new Date()
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+          matchesAdvancedFilters = matchesAdvancedFilters && 
+            (!lastSessionDate || lastSessionDate > thirtyDaysAgo)
+          break
+      }
+    }
+    
+    // Subject filter
+    if (activeFilters.subject && activeFilters.subject !== 'all') {
+      matchesAdvancedFilters = matchesAdvancedFilters && 
+        student.subjects.includes(activeFilters.subject)
+    }
+    
+    // Sessions filter
+    if (activeFilters.sessions && activeFilters.sessions !== 'all') {
+      const minSessions = parseInt(activeFilters.sessions)
+      matchesAdvancedFilters = matchesAdvancedFilters && 
+        student.completed_sessions >= minSessions
+    }
+    
+    // Rating filter
+    if (activeFilters.rating && activeFilters.rating !== 'all') {
+      const minRating = parseFloat(activeFilters.rating)
+      matchesAdvancedFilters = matchesAdvancedFilters && 
+        student.average_rating >= minRating
+    }
+    
+    // Last activity filter
+    if (activeFilters.last_activity && activeFilters.last_activity !== 'all') {
+      const lastSessionDate = student.last_session ? new Date(student.last_session) : null
+      const now = new Date()
+      
+      if (lastSessionDate) {
+        switch (activeFilters.last_activity) {
+          case 'week':
+            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+            matchesAdvancedFilters = matchesAdvancedFilters && lastSessionDate > weekAgo
+            break
+          case 'month':
+            const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+            matchesAdvancedFilters = matchesAdvancedFilters && lastSessionDate > monthAgo
+            break
+          case 'quarter':
+            const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+            matchesAdvancedFilters = matchesAdvancedFilters && lastSessionDate > quarterAgo
+            break
+          case 'year':
+            const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
+            matchesAdvancedFilters = matchesAdvancedFilters && lastSessionDate > yearAgo
+            break
+        }
+      } else {
+        matchesAdvancedFilters = false
+      }
+    }
+    
+    // Progress filter
+    if (activeFilters.progress && activeFilters.progress !== 'all') {
+      const completedSessions = student.completed_sessions
+      switch (activeFilters.progress) {
+        case 'beginner':
+          matchesAdvancedFilters = matchesAdvancedFilters && completedSessions < 5
+          break
+        case 'intermediate':
+          matchesAdvancedFilters = matchesAdvancedFilters && completedSessions >= 5 && completedSessions < 20
+          break
+        case 'advanced':
+          matchesAdvancedFilters = matchesAdvancedFilters && completedSessions >= 20
+          break
+      }
+    }
+    
+    return matchesSearch && matchesAdvancedFilters
+  })
 
   return (
     <ProtectedRoute>
@@ -329,15 +604,30 @@ export default function TutorStudentsPage() {
                   </div>
                 </div>
 
+                {/* Advanced Filters */}
+                <div className="mb-6">
+                  <AdvancedFilters
+                    filters={advancedFilters}
+                    activeFilters={activeFilters}
+                    onFilterChange={handleFilterChange}
+                    onClearFilters={handleClearFilters}
+                    resultsCount={filteredStudents.length}
+                    totalCount={students.length}
+                    loading={loading}
+                    userType="tutor"
+                    content={currentContent}
+                  />
+                </div>
+
                 {/* Students List */}
                 <div className="bg-white rounded-lg shadow">
                   <div className="px-6 py-4 border-b border-gray-200">
                     <h3 className="text-lg font-medium text-gray-900">{currentContent.title}</h3>
                   </div>
                   <div className="p-6">
-                    {students.length > 0 ? (
+                    {filteredStudents.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {students.map((student) => (
+                        {filteredStudents.map((student) => (
                           <div key={student.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                             <div className="flex items-start justify-between mb-4">
                               <div className="flex items-center space-x-3">
