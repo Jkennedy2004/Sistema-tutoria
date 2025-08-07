@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { AccessibilityProvider } from '../lib/accessibilityContext'
 import { AuthProvider } from '../lib/auth/AuthContext'
+import { LanguageIndicator } from '../components/accessibility/LanguageIndicator'
+import { ContactModalWrapper } from '../components/ContactModalWrapper'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -21,7 +23,10 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <AccessibilityProvider>
-            {children}
+            <ContactModalWrapper>
+              {children}
+              <LanguageIndicator />
+            </ContactModalWrapper>
           </AccessibilityProvider>
         </AuthProvider>
       </body>

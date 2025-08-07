@@ -5,7 +5,7 @@ import { ProtectedRoute } from '../../../../components/auth/ProtectedRoute'
 import { TutorSidebar } from '../../../../components/dashboard/TutorSidebar'
 import { AccessibilityPanel } from '../../../../components/accessibility/AccessibilityPanel'
 import { useState, useEffect } from 'react'
-import { Menu, BookMarked, Plus, Download, Eye, Trash2, FileText, Upload, Edit, Search, Filter, Accessibility, Globe } from 'lucide-react'
+import { Menu, BookMarked, Plus, Download, Eye, Trash2, FileText, Upload, Edit, Search, Filter, Accessibility } from 'lucide-react'
 import { useAccessibilityContext } from '../../../../lib/accessibilityContext'
 import { supabase } from '../../../../lib/supabase/client'
 
@@ -498,13 +498,7 @@ export default function TutorResourcesPage() {
           <Accessibility className="w-6 h-6" />
         </button>
 
-        {/* Language Indicator */}
-        <div className="fixed top-4 left-4 z-40 flex items-center space-x-2 px-3 py-2 bg-white rounded-lg shadow-lg">
-          <Globe className="w-4 h-4 text-blue-600" />
-          <span className="text-sm font-medium text-gray-700">
-            {language === 'es' ? 'Español' : 'English'}
-          </span>
-        </div>
+
 
         {/* Accessibility Panel */}
         <AccessibilityPanel 

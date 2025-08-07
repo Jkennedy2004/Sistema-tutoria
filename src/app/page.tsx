@@ -7,7 +7,6 @@ import {
   BookOpen,
   Users,
   Award,
-  Globe,
   Facebook,
   Twitter,
   Instagram,
@@ -15,7 +14,8 @@ import {
   Mail,
   Phone,
   MapPin,
-  Accessibility
+  Accessibility,
+  Globe
 } from 'lucide-react'
 import { AccessibilityPanel } from '../components/accessibility/AccessibilityPanel'
 import { useAccessibilityContext } from '../lib/accessibilityContext'
@@ -108,13 +108,7 @@ export default function HomePage() {
         <Accessibility className="w-6 h-6" />
       </button>
 
-      {/* Language Indicator */}
-      <div className="fixed top-4 left-4 z-40 flex items-center space-x-2 px-3 py-2 bg-white rounded-lg shadow-lg">
-        <Globe className="w-4 h-4 text-blue-600" />
-        <span className="text-sm font-medium text-gray-700">
-          {language === 'es' ? 'Español' : 'English'}
-        </span>
-      </div>
+
 
       {/* Accessibility Panel */}
       <AccessibilityPanel 
@@ -393,6 +387,16 @@ export default function HomePage() {
             <div>
               <h4 className="text-lg font-semibold mb-4">{currentContent.footer.quickLinks}</h4>
               <ul className="space-y-2">
+                <li>
+                  <button
+                    type="button"
+                    className="text-gray-300 hover:text-white transition-colors underline bg-transparent border-0 p-0 cursor-pointer"
+                    aria-label={`Enlace a ${currentContent.footer.contact}`}
+                    data-contact-modal-trigger
+                  >
+                    {currentContent.footer.contact}
+                  </button>
+                </li>
                 <li>
                   <a href="#" className="text-gray-300 hover:text-white transition-colors" aria-label={`Enlace a ${currentContent.footer.aboutUs}`}>
                     {currentContent.footer.aboutUs}
