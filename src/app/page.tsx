@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   LogIn,
   UserPlus,
@@ -15,15 +15,125 @@ import {
   Phone,
   MapPin,
   Accessibility,
-  Globe
+  Globe,
+  Volume2,
+  Subtitles,
+  FileText
 } from 'lucide-react'
 import { AccessibilityPanel } from '../components/accessibility/AccessibilityPanel'
 import { useAccessibilityContext } from '../lib/accessibilityContext'
+import { useAccessibility } from '../hooks/useAccessibility'
+import { useContactModal } from '../components/ContactModalWrapper'
 
 export default function HomePage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAccessibilityOpen, setIsAccessibilityOpen] = useState(false)
   const { language } = useAccessibilityContext()
+  const accessibility = useAccessibility()
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const { openContactModal } = useContactModal()
+
+  // Estados locales para debug
+  const [debugClosedCaptions, setDebugClosedCaptions] = useState(false)
+  const [debugAudioControls, setDebugAudioControls] = useState(false)
+  const [debugTranscription, setDebugTranscription] = useState(false)
+  
+  // Estado para el email
+  const [email, setEmail] = useState("")
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    
+    console.log('Video accessibility controls updated:', {
+      closedCaptions: accessibility.closedCaptions,
+      audioControls: accessibility.audioControls,
+      transcription: accessibility.transcription
+    })
+    
+    function applyAccessibilitySettings() {
+      if (!video) return
+      
+      // Subtítulos - usar el método correcto
+      if (video.textTracks && video.textTracks.length > 0) {
+        for (let i = 0; i < video.textTracks.length; i++) {
+          const track = video.textTracks[i]
+          if (accessibility.closedCaptions) {
+            track.mode = 'showing'
+            console.log(`Track ${i} activado: ${track.mode}`)
+          } else {
+            track.mode = 'hidden'
+            console.log(`Track ${i} desactivado: ${track.mode}`)
+          }
+        }
+      }
+      
+      // Audio - silenciar cuando se activa el control
+      video.muted = accessibility.audioControls
+      console.log('Video muted:', video.muted)
+      
+      // Si se activan los controles de audio, también pausar el video
+      if (accessibility.audioControls) {
+        video.pause()
+      }
+    }
+    
+    // Esperar a que el video esté listo
+    if (video.readyState >= 1) {
+      applyAccessibilitySettings()
+    } else {
+      video.addEventListener('loadedmetadata', applyAccessibilitySettings)
+    }
+    
+    return () => {
+      if (video) {
+        video.removeEventListener('loadedmetadata', applyAccessibilitySettings)
+      }
+    }
+  }, [accessibility.closedCaptions, accessibility.audioControls, accessibility.transcription])
+
+  // Efecto para mostrar transcripción cuando se active
+  useEffect(() => {
+    console.log('Accessibility states changed:', {
+      closedCaptions: accessibility.closedCaptions,
+      audioControls: accessibility.audioControls,
+      transcription: accessibility.transcription
+    })
+    
+    if (accessibility.transcription) {
+      // Crear modal con transcripción
+      const transcription = `Transcripción del video TutorPro
+
+00:00:00 - 00:00:04: Alguna vez te has sentido frustrado intentando entender un tema sin éxito?
+
+00:00:04 - 00:00:06: Yo sí. Estudiaba por horas y nada.
+
+00:00:06 - 00:00:08: Hasta que descubrí TutorPro,
+
+00:00:08 - 00:00:12: tutorías personalizadas en línea que se adaptan a tu forma de aprender.
+
+00:00:12 - 00:00:17: Tutores expertos, horarios flexibles y lo mejor, realmente entiendes!
+
+00:00:17 - 00:00:20: Ya no más frustración, ahora tengo confianza.
+
+00:00:20 - 00:00:23: TutorPro cambió mi manera de estudiar para siempre.`
+
+      const modal = document.createElement('div')
+      modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50'
+      modal.innerHTML = `
+        <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold">Transcripción del Video</h3>
+            <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700">
+              ✕
+            </button>
+          </div>
+          <pre class="whitespace-pre-wrap text-sm">${transcription}</pre>
+        </div>
+      `
+      document.body.appendChild(modal)
+    }
+  }, [accessibility.transcription])
 
   // Content based on language
   const content = {
@@ -32,8 +142,8 @@ export default function HomePage() {
       titleHighlight: 'TutorPro',
       subtitle: 'Aprende más rápido.',
       description: 'Cuando necesitas dominar teorías complejas y no tienes tiempo para organizar tu estudio, TutorPro se encarga de conectar estudiantes con tutores expertos para crear un aprendizaje efectivo y personalizado.',
-      emailPlaceholder: 'Ingresa tu email para comenzar',
-      startButton: 'Comenzar Ahora',
+      emailPlaceholder: 'Ingresa tu email para contactarnos',
+      startButton: 'Contáctanos',
       loginButton: 'Iniciar Sesión',
       registerButton: 'Registrarse',
       featuresTitle: 'Una forma simple y probada de mejorar tu rendimiento académico',
@@ -65,8 +175,8 @@ export default function HomePage() {
       titleHighlight: 'TutorPro',
       subtitle: 'Learn faster.',
       description: 'When you need to master complex theories and don\'t have time to organize your studies, TutorPro takes care of connecting students with expert tutors to create effective and personalized learning.',
-      emailPlaceholder: 'Enter your email to get started',
-      startButton: 'Get Started',
+      emailPlaceholder: 'Enter your email to contact us',
+      startButton: 'Contact Us',
       loginButton: 'Login',
       registerButton: 'Register',
       featuresTitle: 'A simple and proven way to improve your academic performance',
@@ -215,11 +325,14 @@ export default function HomePage() {
                     placeholder={currentContent.emailPlaceholder}
                     className="input-field"
                     aria-label="Campo de email para comenzar"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
                 <button 
                   className="btn-primary whitespace-nowrap"
                   aria-label={currentContent.startButton}
+                  onClick={() => openContactModal(email)}
                 >
                   {currentContent.startButton}
                 </button>
@@ -333,6 +446,262 @@ export default function HomePage() {
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Accessible Video Section */}
+      <section className="py-8 bg-white flex flex-col items-center">
+        <h2 className="text-xl font-bold mb-4">Video de introducción</h2>
+        
+        {/* Indicadores de accesibilidad */}
+        <div className="mb-4 flex gap-4 text-sm">
+          <div className={`px-3 py-1 rounded-full ${accessibility.closedCaptions ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+            Subtítulos: {accessibility.closedCaptions ? 'Activados' : 'Desactivados'}
+          </div>
+          <div className={`px-3 py-1 rounded-full ${accessibility.audioControls ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'}`}>
+            Audio: {accessibility.audioControls ? 'Silenciado' : 'Activado'}
+          </div>
+          <div className={`px-3 py-1 rounded-full ${accessibility.transcription ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}`}>
+            Transcripción: {accessibility.transcription ? 'Disponible' : 'No disponible'}
+          </div>
+        </div>
+        
+        <video
+          id="main-accessible-video"
+          ref={videoRef}
+          className="w-full max-w-4xl rounded-lg shadow-lg aspect-video"
+          controls
+          preload="metadata"
+          aria-label="Video introductorio de TutorPro"
+        >
+          <source src="/Video.mp4" type="video/mp4" />
+          <track
+            label="Español"
+            kind="subtitles"
+            srcLang="es"
+            src="/video.vtt"
+            default
+          />
+          Tu navegador no soporta el elemento de video.
+        </video>
+        
+        {/* Controles dinámicos según panel de accesibilidad */}
+        <div className="mt-4 space-y-4">
+          {/* Controles de Audio */}
+          {debugAudioControls && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-red-800 mb-3 flex items-center">
+                <Volume2 className="w-4 h-4 mr-2" />
+                Controles de Audio
+              </h4>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const video = videoRef.current
+                    if (video) {
+                      video.volume = Math.max(video.volume - 0.1, 0)
+                    }
+                  }}
+                  className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm"
+                >
+                  Bajar Volumen
+                </button>
+                <button
+                  onClick={() => {
+                    const video = videoRef.current
+                    if (video) {
+                      video.volume = Math.min(video.volume + 0.1, 1)
+                    }
+                  }}
+                  className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm"
+                >
+                  Subir Volumen
+                </button>
+                <button
+                  onClick={() => {
+                    const video = videoRef.current
+                    if (video) {
+                      video.muted = !video.muted
+                    }
+                  }}
+                  className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm"
+                >
+                  {videoRef.current?.muted ? 'Desmutear' : 'Mutear'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Controles de Subtítulos */}
+          {debugClosedCaptions && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-green-800 mb-3 flex items-center">
+                <Subtitles className="w-4 h-4 mr-2" />
+                Controles de Subtítulos
+              </h4>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const video = videoRef.current
+                    if (video && video.textTracks.length > 0) {
+                      video.textTracks[0].mode = 'showing'
+                    }
+                  }}
+                  className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm"
+                >
+                  Mostrar Subtítulos
+                </button>
+                <button
+                  onClick={() => {
+                    const video = videoRef.current
+                    if (video && video.textTracks.length > 0) {
+                      video.textTracks[0].mode = 'hidden'
+                    }
+                  }}
+                  className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm"
+                >
+                  Ocultar Subtítulos
+                </button>
+                <button
+                  onClick={() => {
+                    const link = document.createElement('a')
+                    link.href = '/video.vtt'
+                    link.download = 'subtitulos-tutorpro.vtt'
+                    document.body.appendChild(link)
+                    link.click()
+                    document.body.removeChild(link)
+                  }}
+                  className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm"
+                >
+                  Descargar Subtítulos
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Controles de Transcripción */}
+          {debugTranscription && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center">
+                <FileText className="w-4 h-4 mr-2" />
+                Controles de Transcripción
+              </h4>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const transcription = `Transcripción del video TutorPro
+
+00:00:00 - 00:00:04: Alguna vez te has sentido frustrado intentando entender un tema sin éxito?
+
+00:00:04 - 00:00:06: Yo sí. Estudiaba por horas y nada.
+
+00:00:06 - 00:00:08: Hasta que descubrí TutorPro,
+
+00:00:08 - 00:00:12: tutorías personalizadas en línea que se adaptan a tu forma de aprender.
+
+00:00:12 - 00:00:17: Tutores expertos, horarios flexibles y lo mejor, realmente entiendes!
+
+00:00:17 - 00:00:20: Ya no más frustración, ahora tengo confianza.
+
+00:00:20 - 00:00:23: TutorPro cambió mi manera de estudiar para siempre.`
+
+                    const blob = new Blob([transcription], { type: 'text/plain' })
+                    const url = URL.createObjectURL(blob)
+                    const link = document.createElement('a')
+                    link.href = url
+                    link.download = 'transcripcion-tutorpro.txt'
+                    document.body.appendChild(link)
+                    link.click()
+                    document.body.removeChild(link)
+                    URL.revokeObjectURL(url)
+                  }}
+                  className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+                >
+                  Descargar Transcripción
+                </button>
+                <button
+                  onClick={() => {
+                    const transcription = `Transcripción del video TutorPro
+
+00:00:00 - 00:00:04: Alguna vez te has sentido frustrado intentando entender un tema sin éxito?
+
+00:00:04 - 00:00:06: Yo sí. Estudiaba por horas y nada.
+
+00:00:06 - 00:00:08: Hasta que descubrí TutorPro,
+
+00:00:08 - 00:00:12: tutorías personalizadas en línea que se adaptan a tu forma de aprender.
+
+00:00:12 - 00:00:17: Tutores expertos, horarios flexibles y lo mejor, realmente entiendes!
+
+00:00:17 - 00:00:20: Ya no más frustración, ahora tengo confianza.
+
+00:00:20 - 00:00:23: TutorPro cambió mi manera de estudiar para siempre.`
+
+                    const modal = document.createElement('div')
+                    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50'
+                    modal.innerHTML = `
+                      <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+                        <div class="flex justify-between items-center mb-4">
+                          <h3 class="text-lg font-bold">Transcripción del Video</h3>
+                          <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700">
+                            ✕
+                          </button>
+                        </div>
+                        <pre class="whitespace-pre-wrap text-sm">${transcription}</pre>
+                      </div>
+                    `
+                    document.body.appendChild(modal)
+                  }}
+                  className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+                >
+                  Ver Transcripción
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <p className="mt-4 text-sm text-gray-600">
+          Usa el panel de accesibilidad para controlar los subtítulos, audio y descargar recursos del video.
+        </p>
+        
+        {/* Botón de prueba temporal */}
+        <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <h4 className="text-sm font-semibold text-yellow-800 mb-2">Prueba de Controles</h4>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                console.log('Testing closedCaptions toggle')
+                setDebugClosedCaptions(!debugClosedCaptions)
+              }}
+              className="px-3 py-1 bg-yellow-600 text-white rounded text-sm"
+            >
+              Toggle Subtítulos
+            </button>
+            <button
+              onClick={() => {
+                console.log('Testing audioControls toggle')
+                setDebugAudioControls(!debugAudioControls)
+              }}
+              className="px-3 py-1 bg-yellow-600 text-white rounded text-sm"
+            >
+              Toggle Audio
+            </button>
+            <button
+              onClick={() => {
+                console.log('Testing transcription toggle')
+                setDebugTranscription(!debugTranscription)
+              }}
+              className="px-3 py-1 bg-yellow-600 text-white rounded text-sm"
+            >
+              Toggle Transcripción
+            </button>
+          </div>
+          <p className="text-xs text-yellow-700 mt-2">
+            Estados actuales: Subtítulos: {debugClosedCaptions ? 'ON' : 'OFF'}, 
+            Audio: {debugAudioControls ? 'ON' : 'OFF'}, 
+            Transcripción: {debugTranscription ? 'ON' : 'OFF'}
+          </p>
         </div>
       </section>
 

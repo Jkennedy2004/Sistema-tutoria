@@ -111,14 +111,35 @@ export default function StudentMessagesPage() {
         )
         
         // Mark all unread messages in this conversation as read
+        const updatedMessages = [...messages]
+        let hasChanges = false
+
         for (const message of unreadMessages) {
-          await markAsRead(message.id)
+          const { error } = await supabase
+            .from('messages')
+            .update({ is_read: true })
+            .eq('id', message.id)
+
+          if (!error) {
+            const index = updatedMessages.findIndex(msg => msg.id === message.id)
+            if (index !== -1) {
+              updatedMessages[index] = { ...updatedMessages[index], is_read: true }
+              hasChanges = true
+            }
+          }
+        }
+
+        // Solo actualizar el estado si hubo cambios
+        if (hasChanges) {
+          setMessages(updatedMessages)
+          // Actualizar las conversaciones sin recargar
+          organizeConversations(updatedMessages)
         }
       }
     }
     
     markMessagesAsRead()
-  }, [selectedConversation, messages, user?.id])
+  }, [selectedConversation, user?.id]) // No incluir messages en las dependencias
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -153,6 +174,7 @@ export default function StudentMessagesPage() {
         return
       }
 
+      // Comparar con los mensajes actuales para evitar actualizaciones innecesarias
       const transformedMessages = data?.map(msg => ({
         id: msg.id,
         content: msg.content,
@@ -161,14 +183,19 @@ export default function StudentMessagesPage() {
         sender_name: (msg.sender as any)?.name || 'Usuario',
         receiver_name: (msg.receiver as any)?.name || 'Usuario',
         created_at: msg.created_at,
-        updated_at: msg.created_at, // Use created_at as fallback
+        updated_at: msg.created_at,
         is_read: msg.is_read,
         session_title: (msg.sessions as any)?.title,
-        is_edited: false // Default to false since we don't have the column yet
+        is_edited: false
       })) || []
 
-      setMessages(transformedMessages)
-      organizeConversations(transformedMessages)
+      // Verificar si hay cambios reales antes de actualizar el estado
+      const hasChanges = JSON.stringify(messages) !== JSON.stringify(transformedMessages)
+      
+      if (hasChanges) {
+        setMessages(transformedMessages)
+        organizeConversations(transformedMessages)
+      }
     } catch (error) {
       console.error('Error loading messages:', error)
     } finally {
@@ -239,24 +266,57 @@ export default function StudentMessagesPage() {
 
       setSending(true)
 
-      const { error } = await supabase
+      const newMessageData = {
+        sender_id: user.id,
+        receiver_id: selectedTutor,
+        content: newMessage.trim(),
+        is_read: false
+      }
+
+      const { data, error } = await supabase
         .from('messages')
-        .insert({
-          sender_id: user.id,
-          receiver_id: selectedTutor,
-          content: newMessage.trim(),
-          is_read: false
-        })
+        .insert(newMessageData)
+        .select(`
+          id,
+          content,
+          sender_id,
+          receiver_id,
+          created_at,
+          is_read,
+          session_id,
+          sender:sender_id(name),
+          receiver:receiver_id(name),
+          sessions(title)
+        `)
+        .single()
 
       if (error) {
         console.error('Error sending message:', error)
         return
       }
 
+      // Transformar el nuevo mensaje al formato correcto
+      const newMessageTransformed = {
+        id: data.id,
+        content: data.content,
+        sender_id: data.sender_id,
+        receiver_id: data.receiver_id,
+        sender_name: (data.sender as any)?.name || 'Usuario',
+        receiver_name: (data.receiver as any)?.name || 'Usuario',
+        created_at: data.created_at,
+        updated_at: data.created_at,
+        is_read: data.is_read,
+        session_title: (data.sessions as any)?.title,
+        is_edited: false
+      }
+
+      // Actualizar el estado local sin recargar
+      setMessages(prevMessages => [...prevMessages, newMessageTransformed])
+      organizeConversations([...messages, newMessageTransformed])
+
       setNewMessage('')
       setSelectedTutor('')
       setShowNewMessageModal(false)
-      await loadMessages()
     } catch (error) {
       console.error('Error sending message:', error)
     } finally {
@@ -270,21 +330,53 @@ export default function StudentMessagesPage() {
 
       setSending(true)
 
-      const { error } = await supabase
+      const newMessageData = {
+        sender_id: user.id,
+        receiver_id: tutorId,
+        content: content.trim(),
+        is_read: false
+      }
+
+      const { data, error } = await supabase
         .from('messages')
-        .insert({
-          sender_id: user.id,
-          receiver_id: tutorId,
-          content: content.trim(),
-          is_read: false
-        })
+        .insert(newMessageData)
+        .select(`
+          id,
+          content,
+          sender_id,
+          receiver_id,
+          created_at,
+          is_read,
+          session_id,
+          sender:sender_id(name),
+          receiver:receiver_id(name),
+          sessions(title)
+        `)
+        .single()
 
       if (error) {
         console.error('Error sending message:', error)
         return
       }
 
-      await loadMessages()
+      // Transformar el nuevo mensaje al formato correcto
+      const newMessageTransformed = {
+        id: data.id,
+        content: data.content,
+        sender_id: data.sender_id,
+        receiver_id: data.receiver_id,
+        sender_name: (data.sender as any)?.name || 'Usuario',
+        receiver_name: (data.receiver as any)?.name || 'Usuario',
+        created_at: data.created_at,
+        updated_at: data.created_at,
+        is_read: data.is_read,
+        session_title: (data.sessions as any)?.title,
+        is_edited: false
+      }
+
+      // Actualizar el estado local sin recargar
+      setMessages(prevMessages => [...prevMessages, newMessageTransformed])
+      organizeConversations([...messages, newMessageTransformed])
     } catch (error) {
       console.error('Error sending message:', error)
     } finally {
@@ -299,8 +391,8 @@ export default function StudentMessagesPage() {
       const { error } = await supabase
         .from('messages')
         .update({
-          content: newContent.trim()
-          // updated_at will be handled by trigger when column exists
+          content: newContent.trim(),
+          is_edited: true
         })
         .eq('id', messageId)
 
@@ -309,9 +401,25 @@ export default function StudentMessagesPage() {
         return
       }
 
+      // Actualizar el estado local sin recargar
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg.id === messageId 
+            ? { ...msg, content: newContent.trim(), is_edited: true }
+            : msg
+        )
+      )
+
+      // Actualizar las conversaciones sin recargar
+      const updatedMessages = messages.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, content: newContent.trim(), is_edited: true }
+          : msg
+      )
+      organizeConversations(updatedMessages)
+
       setEditingMessage('')
       setEditContent('')
-      await loadMessages()
     } catch (error) {
       console.error('Error editing message:', error)
     }
@@ -329,7 +437,10 @@ export default function StudentMessagesPage() {
         return
       }
 
-      await loadMessages()
+      // Actualizar el estado local sin recargar
+      const updatedMessages = messages.filter(msg => msg.id !== messageId)
+      setMessages(updatedMessages)
+      organizeConversations(updatedMessages)
     } catch (error) {
       console.error('Error deleting message:', error)
     }

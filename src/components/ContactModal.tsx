@@ -1,15 +1,16 @@
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { supabase } from '../lib/supabase/client'
 
 interface ContactModalProps {
   open: boolean
   onClose: () => void
+  initialEmail?: string
 }
 
-export const ContactModal: React.FC<ContactModalProps> = ({ open, onClose }) => {
+export const ContactModal: React.FC<ContactModalProps> = ({ open, onClose, initialEmail = "" }) => {
   const [form, setForm] = useState({
     name: "",
-    email: "",
+    email: initialEmail,
     subject: "",
     message: "",
     honeypot: ""
@@ -17,6 +18,13 @@ export const ContactModal: React.FC<ContactModalProps> = ({ open, onClose }) => 
   const [errors, setErrors] = useState<any>({})
   const [success, setSuccess] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  // Actualizar email cuando cambie la prop
+  useEffect(() => {
+    if (initialEmail) {
+      setForm(prev => ({ ...prev, email: initialEmail }))
+    }
+  }, [initialEmail])
 
   if (!open) return null
 
@@ -72,7 +80,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ open, onClose }) => 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-2xl shadow-2xl border border-blue-100 w-full max-w-md p-6 sm:p-8 relative animate-modalIn">
+      <div className="bg-white rounded-2xl shadow-2xl border border-blue-100 w-full max-w-4xl p-6 sm:p-8 relative animate-modalIn">
         <button
           className="absolute top-3 right-3 text-gray-400 hover:text-blue-600 text-2xl font-bold focus:outline-none transition-colors"
           onClick={handleCancel}
@@ -90,35 +98,37 @@ export const ContactModal: React.FC<ContactModalProps> = ({ open, onClose }) => 
         )}
         <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           <input type="text" name="honeypot" value={form.honeypot} onChange={handleChange} className="hidden" tabIndex={-1} autoComplete="off" />
-          <div>
-            <label htmlFor="name" className="block text-xs font-semibold text-gray-700 mb-1">Nombre</label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              autoComplete="name"
-              className={`input-field mt-0 text-sm bg-gray-50 border-2 focus:border-blue-400 ${errors.name ? 'border-red-400' : 'border-gray-200'}`}
-              value={form.name}
-              onChange={handleChange}
-              disabled={submitting}
-              required
-            />
-            {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
-          </div>
-          <div>
-            <label htmlFor="email" className="block text-xs font-semibold text-gray-700 mb-1">Correo electrónico</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              className={`input-field mt-0 text-sm bg-gray-50 border-2 focus:border-blue-400 ${errors.email ? 'border-red-400' : 'border-gray-200'}`}
-              value={form.email}
-              onChange={handleChange}
-              disabled={submitting}
-              required
-            />
-            {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="name" className="block text-xs font-semibold text-gray-700 mb-1">Nombre</label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                autoComplete="name"
+                className={`input-field mt-0 text-sm bg-gray-50 border-2 focus:border-blue-400 ${errors.name ? 'border-red-400' : 'border-gray-200'}`}
+                value={form.name}
+                onChange={handleChange}
+                disabled={submitting}
+                required
+              />
+              {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
+            </div>
+            <div>
+              <label htmlFor="email" className="block text-xs font-semibold text-gray-700 mb-1">Correo electrónico</label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                className={`input-field mt-0 text-sm bg-gray-50 border-2 focus:border-blue-400 ${errors.email ? 'border-red-400' : 'border-gray-200'}`}
+                value={form.email}
+                onChange={handleChange}
+                disabled={submitting}
+                required
+              />
+              {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
+            </div>
           </div>
           <div>
             <label htmlFor="subject" className="block text-xs font-semibold text-gray-700 mb-1">Asunto</label>
