@@ -1,0 +1,534 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* Accessibility CSS Variables */
+  :root {
+    --high-contrast: 0;
+    --monochrome: 0;
+    --font-size: 100%;
+    --line-spacing: 1.5;
+    --word-spacing: 0px;
+    --letter-spacing: 0px;
+    --dyslexic-font: 0;
+    --colorblind-typography: 0;
+    --page-zoom: 100%;
+    --focus-highlight: 0;
+    --skip-links: 0;
+    --pause-animations: 0;
+  }
+
+  /* High Contrast Mode */
+  html[style*="--high-contrast: 1"] {
+    filter: contrast(150%) brightness(120%);
+  }
+
+  /* Monochrome Mode */
+  html[style*="--monochrome: 1"] {
+    filter: grayscale(100%);
+  }
+
+  /* Font Size */
+  html[style*="--font-size"] {
+    font-size: var(--font-size);
+  }
+
+  /* Line Spacing */
+  html[style*="--line-spacing"] {
+    line-height: var(--line-spacing);
+  }
+
+  /* Word Spacing */
+  html[style*="--word-spacing"] {
+    word-spacing: var(--word-spacing);
+  }
+
+  /* Letter Spacing */
+  html[style*="--letter-spacing"] {
+    letter-spacing: var(--letter-spacing);
+  }
+
+  /* Dyslexic Font - Fixed */
+  html[style*="--dyslexic-font: 1"] * {
+    font-family: 'OpenDyslexic', 'Arial', sans-serif !important;
+  }
+
+  /* Colorblind Typography */
+  html[style*="--colorblind-typography: 1"] {
+    /* High contrast colors for colorblind users */
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --link-color: #0000EE;
+    --link-visited: #551A8B;
+    --background-primary: #FFFFFF;
+    --background-secondary: #F5F5F5;
+    --border-color: #000000;
+  }
+
+  html[style*="--colorblind-typography: 1"] * {
+    color: var(--text-primary) !important;
+  }
+
+  html[style*="--colorblind-typography: 1"] a {
+    color: var(--link-color) !important;
+    text-decoration: underline !important;
+  }
+
+  html[style*="--colorblind-typography: 1"] a:visited {
+    color: var(--link-visited) !important;
+  }
+
+  html[style*="--colorblind-typography: 1"] .bg-blue-600,
+  html[style*="--colorblind-typography: 1"] .bg-blue-500 {
+    background-color: #000000 !important;
+    color: #FFFFFF !important;
+  }
+
+  html[style*="--colorblind-typography: 1"] .text-blue-600,
+  html[style*="--colorblind-typography: 1"] .text-blue-500 {
+    color: #000000 !important;
+  }
+
+  /* Focus Highlight */
+  html[style*="--focus-highlight: 1"] *:focus {
+    outline: 3px solid #2196F3 !important;
+    outline-offset: 2px !important;
+  }
+
+  /* Skip Links */
+  html[style*="--skip-links: 1"] .skip-link {
+    position: absolute;
+    top: -40px;
+    left: 6px;
+    background: #2196F3;
+    color: white;
+    padding: 8px;
+    text-decoration: none;
+    border-radius: 4px;
+    z-index: 1000;
+  }
+
+  html[style*="--skip-links: 1"] .skip-link:focus {
+    top: 6px;
+  }
+
+  /* Pause Animations */
+  html[style*="--pause-animations: 1"] * {
+    animation-play-state: paused !important;
+    transition: none !important;
+  }
+
+  /* Visual Alerts */
+  html[style*="--visual-alerts: 1"] .alert-sound {
+    animation: flash 1s infinite;
+  }
+
+  @keyframes flash {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-lg transition-colors duration-200;
+  }
+
+  .btn-secondary {
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 px-6 rounded-lg border border-gray-300 transition-colors duration-200;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300;
+  }
+
+  .gradient-bg {
+    background: linear-gradient(135deg, #E3F2FD 0%, #FFFFFF 100%);
+  }
+
+  .text-responsive {
+    @apply text-2xl md:text-3xl lg:text-4xl xl:text-5xl;
+  }
+
+  /* Accessibility Button */
+  .accessibility-btn {
+    @apply fixed top-4 right-4 z-40 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors duration-200;
+  }
+
+  /* Messaging System Styles */
+  .message-bubble {
+    @apply relative rounded-lg px-4 py-2 max-w-xs lg:max-w-md;
+    animation: messageSlideIn 0.3s ease-out;
+  }
+
+  .message-bubble-own {
+    @apply bg-blue-500 text-white ml-auto;
+  }
+
+  .message-bubble-other {
+    @apply bg-gray-100 text-gray-900;
+  }
+
+  .message-bubble-green {
+    @apply bg-green-500 text-white;
+  }
+
+  .conversation-item {
+    @apply p-4 cursor-pointer hover:bg-gray-50 transition-all duration-200;
+  }
+
+  .conversation-item-selected {
+    @apply bg-blue-50 border-r-2 border-blue-500;
+  }
+
+  .conversation-item-selected-green {
+    @apply bg-green-50 border-r-2 border-green-500;
+  }
+
+  .unread-badge {
+    @apply bg-red-500 text-white text-xs rounded-full px-2 py-1;
+    animation: pulse 2s infinite;
+  }
+
+  .message-input {
+    @apply flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:border-transparent transition-all duration-200;
+  }
+
+  .message-input:focus {
+    @apply shadow-md;
+  }
+
+  .send-button {
+    @apply px-4 py-2 text-white rounded-md transition-all duration-200 hover:shadow-md;
+  }
+
+  .send-button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50;
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  .modal-content {
+    @apply bg-white rounded-lg p-6 w-full max-w-md mx-4;
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .typing-indicator {
+    @apply flex items-center space-x-1 text-gray-500 text-sm;
+  }
+
+  .typing-dot {
+    @apply w-2 h-2 bg-gray-400 rounded-full;
+    animation: typing 1.4s infinite ease-in-out;
+  }
+
+  .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+  .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+  .message-status {
+    @apply flex items-center space-x-1 text-xs;
+  }
+
+  .status-icon {
+    @apply w-3 h-3;
+  }
+
+  .status-sent {
+    @apply text-gray-400;
+  }
+
+  .status-delivered {
+    @apply text-blue-400;
+  }
+
+  .status-read {
+    @apply text-blue-500;
+  }
+
+  .message-actions {
+    @apply flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200;
+  }
+
+  .message-bubble:hover .message-actions {
+    @apply opacity-100;
+  }
+
+  .action-button {
+    @apply p-1 rounded hover:bg-gray-200 transition-colors duration-150;
+  }
+
+  .edit-button {
+    @apply hover:text-blue-600;
+  }
+
+  .delete-button {
+    @apply hover:text-red-600;
+  }
+
+  .conversation-search {
+    @apply relative;
+  }
+
+  .conversation-search input {
+    @apply w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:border-transparent;
+  }
+
+  .conversation-search-icon {
+    @apply absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5;
+  }
+
+  .refresh-button {
+    @apply p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200;
+  }
+
+  .refresh-button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .new-message-button {
+    @apply btn-primary flex items-center space-x-2;
+  }
+
+  .stats-card {
+    @apply bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow duration-200;
+  }
+
+  .stats-icon {
+    @apply p-3 rounded-lg;
+  }
+
+  .stats-icon-blue {
+    @apply bg-blue-100 text-blue-600;
+  }
+
+  .stats-icon-red {
+    @apply bg-red-100 text-red-600;
+  }
+
+  .stats-icon-green {
+    @apply bg-green-100 text-green-600;
+  }
+
+  .stats-icon-purple {
+    @apply bg-purple-100 text-purple-600;
+  }
+
+  .empty-state {
+    @apply text-center py-8;
+  }
+
+  .empty-state-icon {
+    @apply w-16 h-16 text-gray-400 mx-auto mb-4;
+  }
+
+  .empty-state-title {
+    @apply text-lg font-medium text-gray-900 mb-2;
+  }
+
+  .empty-state-description {
+    @apply text-gray-500;
+  }
+}
+
+@layer utilities {
+  .fade-in {
+    animation: fadeIn 0.6s ease-in-out;
+  }
+
+  .slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .bounce-in {
+    animation: bounceIn 0.6s ease-out;
+  }
+
+  .pulse-slow {
+    animation: pulse 3s infinite;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes messageSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes bounceIn {
+    0% {
+      opacity: 0;
+      transform: scale(0.3);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.05);
+    }
+    70% {
+      transform: scale(0.9);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes typing {
+    0%, 80%, 100% {
+      transform: scale(0.8);
+      opacity: 0.5;
+    }
+    40% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  /* Scrollbar Styling */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #CBD5E0 #F7FAFC;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #F7FAFC;
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #CBD5E0;
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #A0AEC0;
+  }
+
+  /* Message bubble hover effects */
+  .message-bubble:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Conversation item hover effects */
+  .conversation-item:hover {
+    transform: translateX(2px);
+  }
+
+  /* Button hover effects */
+  .send-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Input focus effects */
+  .message-input:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  }
+
+  /* Loading states */
+  .loading-shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .message-bubble {
+      @apply max-w-full;
+    }
+    
+    .conversation-item {
+      @apply p-3;
+    }
+    
+    .modal-content {
+      @apply mx-2;
+    }
+  }
+
+  /* Dark mode support (if needed in the future) */
+  @media (prefers-color-scheme: dark) {
+    .message-bubble-other {
+      @apply bg-gray-700 text-gray-100;
+    }
+    
+    .conversation-item {
+      @apply hover:bg-gray-700;
+    }
+    
+    .conversation-item-selected {
+      @apply bg-blue-900 border-blue-400;
+    }
+  }
+}
